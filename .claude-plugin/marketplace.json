@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "advisor",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "source": "./plugins/advisor",
       "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints."
     }

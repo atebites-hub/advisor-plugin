@@ -7,7 +7,16 @@
         "--script",
         "${CURSOR_PLUGIN_ROOT}/advisor.py",
         "serve"
-      ]
+      ],
+      "env": {
+        "ADVISOR_USE_APP_SETTINGS": "${ADVISOR_USE_APP_SETTINGS}",
+        "ADVISOR_CLAUDE_ENABLED": "${ADVISOR_CLAUDE_ENABLED}",
+        "ADVISOR_CLAUDE_MODEL": "${ADVISOR_CLAUDE_MODEL}",
+        "ADVISOR_CLAUDE_EFFORT": "${ADVISOR_CLAUDE_EFFORT}",
+        "ADVISOR_CODEX_ENABLED": "${ADVISOR_CODEX_ENABLED}",
+        "ADVISOR_CODEX_MODEL": "${ADVISOR_CODEX_MODEL}",
+        "ADVISOR_CODEX_EFFORT": "${ADVISOR_CODEX_EFFORT}"
+      }
     }
   }
 }

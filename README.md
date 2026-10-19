@@ -58,7 +58,11 @@ The 0.2.9 Desktop acceptance test enabled full recording with permission, comple
 
 In ZCode, open **Settings → Plugins → Advisor → Advanced details → Configuration**. Keep `use_app_settings` enabled to use the plugin's controls: `claude_enabled`, `claude_model`, `claude_effort`, and the matching `codex_*` fields. Save configuration, then start a fresh session if the existing MCP process still reports the old values. `advisor_status` shows the effective enabled profiles without making a model call.
 
-App settings override the shared file's advisor profiles. Turn `use_app_settings` off to use the shared file and defaults instead. Timeouts, budgets, and `usage_fallback` remain shared-file settings. The shared file must still be valid when app settings override its profiles. These controls use ZCode's [native plugin configuration](https://zcode.z.ai/en/docs/plugin#configure-plugins). Consult the [test report](docs/zcode-smoke-test.md) for the exact versions and workflows verified.
+Claude Code exposes the same controls in `/config` through its [plugin `userConfig` support](https://code.claude.com/docs/en/plugins-reference). Cursor declares them as [plugin variables](https://cursor.com/docs/reference/plugins), configurable by team administrators from dashboard **Plugins → Configure**. Cursor uses the uppercase `ADVISOR_*` field names and string choices `true`/`false`. Individual Cursor and Cursor CLI configuration UIs remain unverified.
+
+The new Claude and Cursor adapters default app overrides **off**, preserving shared settings on installation. Enable `use_app_settings` (Cursor: `ADVISOR_USE_APP_SETTINGS`) to replace **both** advisor profiles with that app's complete set of controls, including enabled flags. ZCode retains its existing default of app overrides on. Review both profiles before enabling overrides: their initial defaults enable both providers.
+
+Turn app overrides off to use the shared file and defaults instead. Timeouts, budgets, and `usage_fallback` always remain shared-file settings, and that file must still be valid. Restart the MCP connection or start a fresh session after saving environment-backed settings. `advisor_status` confirms the effective values without consulting a model. See [configuration verification and limits](docs/host-settings.md) and the [ZCode test report](docs/zcode-smoke-test.md).
 
 For manual MCP integrations or shared setup, run the guided configuration command:
 
@@ -83,7 +87,7 @@ Omitted fields retain the defaults above. Use explicit model identifiers rather 
 
 Disabling an advisor prevents new consultations with it and excludes it from usage handoff. If both are disabled, no new advice can be requested; report required reviews incomplete. Existing jobs keep their submitted profiles, and their results remain readable after settings change. Model or effort changes start separate consultation memory.
 
-Other apps also have native configuration mechanisms, but their Advisor UI adapters are deferred; see [configuration by host](docs/compatibility.md#advisor-configuration).
+ChatGPT's structured settings protocol needs its own adapter; Advisor currently uses the shared file there. Other hosts can also use this shared setup. See [configuration by host](docs/compatibility.md#advisor-configuration).
 
 ## Request advice
 
