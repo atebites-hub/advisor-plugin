@@ -8,6 +8,7 @@
   },
   "extensions": {
     "com.openai": {
+      "onboardingSkill": "./skills/advisor-setup/SKILL.md",
       "interface": {
         "displayName": "Advisor",
         "shortDescription": "Ask another agent for planning and coding advice.",
