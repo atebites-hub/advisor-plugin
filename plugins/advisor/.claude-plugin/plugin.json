@@ -1,8 +1,90 @@
 {
   "name": "advisor",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints.",
   "author": {
     "name": "Advisor contributors"
+  },
+  "userConfig": {
+    "use_app_settings": {
+      "type": "boolean",
+      "title": "Use these advisor settings",
+      "description": "Use the profiles below. Turn off to use the shared Advisor JSON configuration. Fallback permission and timeouts always come from the shared file.",
+      "default": false
+    },
+    "claude_enabled": {
+      "type": "boolean",
+      "title": "Claude Code enabled",
+      "description": "Allow the working agent to choose this advisor.",
+      "default": true
+    },
+    "claude_model": {
+      "type": "string",
+      "title": "Claude Code model",
+      "description": "Explicit model ID supported by your signed-in CLI account.",
+      "default": "claude-opus-5-5",
+      "required": true
+    },
+    "claude_effort": {
+      "type": "string",
+      "title": "Claude Code effort",
+      "description": "low, medium, high, xhigh, or max; support depends on the model and account.",
+      "default": "max",
+      "required": true,
+      "options": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "codex_enabled": {
+      "type": "boolean",
+      "title": "Codex CLI enabled",
+      "description": "Allow the working agent to choose this advisor.",
+      "default": true
+    },
+    "codex_model": {
+      "type": "string",
+      "title": "Codex CLI model",
+      "description": "Explicit model ID supported by your signed-in CLI account.",
+      "default": "gpt-6.1-sol",
+      "required": true
+    },
+    "codex_effort": {
+      "type": "string",
+      "title": "Codex CLI effort",
+      "description": "low, medium, high, xhigh, or max; support depends on the model and account.",
+      "default": "max",
+      "required": true,
+      "options": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    }
+  },
+  "mcpServers": {
+    "advisor": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--script",
+        "${CLAUDE_PLUGIN_ROOT}/advisor.py",
+        "serve"
+      ],
+      "env": {
+        "ADVISOR_USE_APP_SETTINGS": "${user_config.use_app_settings}",
+        "ADVISOR_CLAUDE_ENABLED": "${user_config.claude_enabled}",
+        "ADVISOR_CLAUDE_MODEL": "${user_config.claude_model}",
+        "ADVISOR_CLAUDE_EFFORT": "${user_config.claude_effort}",
+        "ADVISOR_CODEX_ENABLED": "${user_config.codex_enabled}",
+        "ADVISOR_CODEX_MODEL": "${user_config.codex_model}",
+        "ADVISOR_CODEX_EFFORT": "${user_config.codex_effort}"
+      }
+    }
   }
 }

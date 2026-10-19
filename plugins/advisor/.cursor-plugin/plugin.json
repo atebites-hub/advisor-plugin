@@ -1,9 +1,70 @@
 {
   "name": "advisor",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints.",
   "author": {
     "name": "Advisor contributors"
   },
-  "mcpServers": "./.cursor-plugin/mcp.json"
+  "mcpServers": "./.cursor-plugin/mcp.json",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "ADVISOR_USE_APP_SETTINGS": {
+        "type": "string",
+        "title": "Use these advisor settings",
+        "description": "Choose true to use the profiles below, or false to use shared Advisor JSON configuration. Fallback permission and timeouts always come from the shared file.",
+        "enum": ["true", "false"],
+        "default": "false"
+      },
+      "ADVISOR_CLAUDE_ENABLED": {
+        "type": "string",
+        "title": "Claude Code enabled",
+        "description": "Allow the working agent to choose this advisor when these settings are enabled.",
+        "enum": ["true", "false"],
+        "default": "true"
+      },
+      "ADVISOR_CLAUDE_MODEL": {
+        "type": "string",
+        "title": "Claude Code model",
+        "description": "Explicit claude- model ID supported by your signed-in CLI account.",
+        "default": "claude-opus-5-5"
+      },
+      "ADVISOR_CLAUDE_EFFORT": {
+        "type": "string",
+        "title": "Claude Code effort",
+        "description": "Support depends on the model and account.",
+        "enum": ["low", "medium", "high", "xhigh", "max"],
+        "default": "max"
+      },
+      "ADVISOR_CODEX_ENABLED": {
+        "type": "string",
+        "title": "Codex CLI enabled",
+        "description": "Allow the working agent to choose this advisor when these settings are enabled.",
+        "enum": ["true", "false"],
+        "default": "true"
+      },
+      "ADVISOR_CODEX_MODEL": {
+        "type": "string",
+        "title": "Codex CLI model",
+        "description": "Explicit model ID supported by your signed-in CLI account.",
+        "default": "gpt-6.1-sol"
+      },
+      "ADVISOR_CODEX_EFFORT": {
+        "type": "string",
+        "title": "Codex CLI effort",
+        "description": "Support depends on the model and account.",
+        "enum": ["low", "medium", "high", "xhigh", "max"],
+        "default": "max"
+      }
+    },
+    "required": [
+      "ADVISOR_USE_APP_SETTINGS",
+      "ADVISOR_CLAUDE_ENABLED",
+      "ADVISOR_CLAUDE_MODEL",
+      "ADVISOR_CLAUDE_EFFORT",
+      "ADVISOR_CODEX_ENABLED",
+      "ADVISOR_CODEX_MODEL",
+      "ADVISOR_CODEX_EFFORT"
+    ]
+  }
 }
