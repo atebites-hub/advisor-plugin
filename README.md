@@ -2,16 +2,16 @@
 
 Advisor gives a coding agent an independent review at planning, recovery, and completion checkpoints. This repository is a marketplace containing exactly one plugin: **advisor**.
 
-The working agent chooses one advisor per consultation:
+Users enable the advisors the working agent may choose, with one model and effort setting per CLI. The defaults are:
 
 | Provider | Requested model | Effort | Runtime |
 | --- | --- | --- | --- |
 | `claude` | Claude Opus 5.5 (`claude-opus-5-5`) | Max | Claude Code CLI |
 | `codex` | GPT 6.1 Sol (`gpt-6.1-sol`) | Max | Codex CLI |
 
-User-supplied workflow preferences favor `claude` for frontend, design, UX, planning, delegation, and orchestration, and `codex` for engineering, backend, architecture, mathematics, implementation, testing, and optimization. These are soft selection preferences, not benchmarked rankings. The working agent chooses one advisor for the question and constraints.
+The working agent checks `advisor_status` and chooses one enabled advisor per consultation. User-supplied workflow preferences favor `claude` for frontend, design, UX, planning, delegation, and orchestration, and `codex` for engineering, backend, architecture, mathematics, implementation, testing, and optimization. These are soft selection preferences, not benchmarked rankings, and never override disabled settings.
 
-These selectors follow the [Claude CLI reference](https://code.claude.com/docs/en/cli-reference), [Opus 5.5 documentation](https://platform.claude.com/docs/en/models/opus-5-5/migration-guide), and [Codex model documentation](https://learn.chatgpt.com/docs/models). Each consultation starts with one explicitly selected provider. Optional verified-usage handoff can try the other fixed Max profile once within the same job. Responses identify the requested model and effort; they do not claim that the served identity has been independently verified.
+These defaults follow the [Claude CLI reference](https://code.claude.com/docs/en/cli-reference), [Opus 5.5 documentation](https://platform.claude.com/docs/en/models/opus-5-5/migration-guide), and [Codex model documentation](https://learn.chatgpt.com/docs/models). Each consultation starts with one explicitly selected provider. Optional verified-usage handoff can try the other enabled, configured advisor once within the same job. Responses identify the requested model and effort; they do not prove model access or independently verify the served identity.
 
 ## How it works
 
@@ -54,6 +54,37 @@ Desktop **Settings → General → Keep complete model I/O** requires the user's
 
 The 0.2.9 Desktop acceptance test enabled full recording with permission, completed a **75-message** final consultation, and verified `full_retention` / `long_session_ready: true` at **87 messages**. The setting was then restored **OFF** and verified. A later, separately authorized check verified full retention at **91 messages** with recording enabled. These are historical test observations; every installation needs its own consent and readiness check, and every consultation verifies its own record.
 
+## Configure advisors
+
+In ZCode, open **Settings → Plugins → Advisor → Advanced details → Configuration**. Keep `use_app_settings` enabled to use the plugin's controls: `claude_enabled`, `claude_model`, `claude_effort`, and the matching `codex_*` fields. Save configuration, then start a fresh session if the existing MCP process still reports the old values. `advisor_status` shows the effective enabled profiles without making a model call.
+
+App settings override the shared file's advisor profiles. Turn `use_app_settings` off to use the shared file and defaults instead. Timeouts, budgets, and `usage_fallback` remain shared-file settings. The shared file must still be valid when app settings override its profiles. These controls use ZCode's [native plugin configuration](https://zcode.z.ai/en/docs/plugin#configure-plugins). Consult the [test report](docs/zcode-smoke-test.md) for the exact versions and workflows verified.
+
+For manual MCP integrations or shared setup, run the guided configuration command:
+
+```sh
+uv run --script plugins/advisor/advisor.py configure
+# Or select a different file:
+uv run --script plugins/advisor/advisor.py configure --config /absolute/path/advisor.json
+```
+
+The wizard previews both profiles and asks before saving. It preserves unrelated settings. Run one wizard at a time; saves replace the file atomically but are not transactions between simultaneous writers. The default file is `~/.config/advisor/config.json`; `ADVISOR_CONFIG` selects another file for the MCP process or CLI. An explicitly selected missing file is an error when loading settings. For example, enable only GPT 6 Astra Max:
+
+```json
+{
+  "advisors": {
+    "claude": {"enabled": false},
+    "codex": {"enabled": true, "model": "gpt-6-astra", "effort": "max"}
+  }
+}
+```
+
+Omitted fields retain the defaults above. Use explicit model identifiers rather than aliases; Claude identifiers must start with `claude-`. Effort accepts `low`, `medium`, `high`, `xhigh`, or `max`, subject to the installed provider and account. Configuring a value does not establish access or guarantee the provider will serve it. Agent requests select only `provider`; they cannot override the user's model or effort.
+
+Disabling an advisor prevents new consultations with it and excludes it from usage handoff. If both are disabled, no new advice can be requested; report required reviews incomplete. Existing jobs keep their submitted profiles, and their results remain readable after settings change. Model or effort changes start separate consultation memory.
+
+Other apps also have native configuration mechanisms, but their Advisor UI adapters are deferred; see [configuration by host](docs/compatibility.md#advisor-configuration).
+
 ## Request advice
 
 The MCP tool is `consult_advisor`, with one `request` object. Choose one provider and state the review question. An accepted consultation returns a job ID promptly. In ZCode, immediately launch exactly one `completion_watcher.input` through its named `Bash` tool with `run_in_background: true`. Its completion notification prompts `read_advice(job_id)`; the waiter returns readiness only, never advice or a retrieval receipt. Continue independent work while waiting and hold dependent work until advice is retrieved and evaluated. Without a supported native waiter, poll after `poll_after_seconds`. Other hosts have no verified push delivery. Read the existing job after a host timeout rather than resubmitting it.
@@ -89,7 +120,7 @@ uv run --script plugins/advisor/advisor.py consult <<'JSON'
 JSON
 ```
 
-Replace the example workspace with an existing directory. Use `provider: "codex"` for GPT 6.1 Sol Max. Preserve session and task IDs for follow-ups. ZCode defaults its task ID to the native session plus user turn; an explicit stable task ID remains supported. The [skill](plugins/advisor/skills/advisor/SKILL.md) defines every field.
+Replace the example workspace with an existing directory. Use `provider: "codex"` for the user's enabled Codex profile. Preserve session and task IDs for follow-ups. ZCode defaults its task ID to the native session plus user turn; an explicit stable task ID remains supported. The [skill](plugins/advisor/skills/advisor/SKILL.md) defines every field.
 
 The advising processes run in temporary directories with project configuration excluded. Claude has tools disabled and its child-only `CLAUDE_CODE_TMPDIR` points to that private directory, avoiding its shared `/tmp/claude-<uid>` startup path under host sandbox denials. Codex uses a read-only sandbox with shell, plugins, apps, hooks, subagents, global memories, browser, and computer-use features disabled. They advise from the supplied packet and, in ZCode, the bound native snapshot. No unrelated session is imported.
 
@@ -97,7 +128,7 @@ The 0.2.2 Codex transport uses `model_instructions_file`: adviser instructions a
 
 ## Memory and limits
 
-Native advising sessions retain their conversation history. Advisor stores response text, request fingerprints, and native session IDs in private per-task SQLite directories under `~/.local/state/advisor`. Workspace, host session, task, and provider determine isolation. Identical packets reuse cached advice. Native CLI history follows each provider's own retention rules.
+Native advising sessions retain their conversation history. Advisor stores response text, request fingerprints, and native session IDs in private per-task SQLite directories under `~/.local/state/advisor`. Workspace, host session, task, provider, model, and effort determine isolation. Identical packets with the same effective settings reuse cached advice. Native CLI history follows each provider's own retention rules.
 
 Background requests and results are stored under the same private state root, including an `advice.md` file at the returned `advice_path`. This keeps long calls independent of a host's tool deadline. Do not commit this data or place it under version-controlled `docs/advice`; the repository's `docs/` contains contributor documentation.
 
@@ -115,7 +146,7 @@ Optional `~/.config/advisor/config.json`:
 
 To impose a total deadline, add `"timeout_seconds": 1200`; progress never extends an explicit limit. Both timeout settings accept integers from 1 to 3600 seconds. Background jobs freeze settings at submission; changing configuration does not alter an existing job. Legacy jobs retain their numeric deadlines and previous implicit limit. Watchers observe the original job until terminal status; worker startup, lost progress heartbeats, and post-result process cleanup remain bounded.
 
-Set `"usage_fallback": true` to authorize one switch to the other fixed Max advisor after **verified account usage exhaustion**. This can send the frozen packet to both services sequentially and consume both accounts' allowances. The default is false; `advisor_status.usage_fallback.enabled` reports the setting. The same background job, snapshot, watcher, dependency hold, and explicit total deadline continue. `provider_attempts` preserves the original quota cause and answering `provider`. Timeouts, authentication, generic 429s, ambiguous quota, local budgets, and context failures never switch. Both exhausted means an incomplete review. See [detection and privacy limits](docs/usage-fallback.md).
+Set `"usage_fallback": true` to authorize one switch to the other enabled, configured advisor after **verified account usage exhaustion**. This can send the frozen packet to both services sequentially and consume both accounts' allowances. The default is false; `advisor_status.usage_fallback.enabled` reports the setting. The same background job, snapshot, watcher, dependency hold, and explicit total deadline continue. `provider_attempts` preserves each requested model/effort, the original quota cause, and answering `provider`. Timeouts, authentication, generic 429s, ambiguous quota, local budgets, and context failures never switch. A disabled alternate is never launched; both exhausted means an incomplete review. See [detection and privacy limits](docs/usage-fallback.md).
 
 `ADVISOR_CONFIG` and `ADVISOR_STATE_DIR` override the local paths. To discard plugin-side memory, remove the relevant state directory after active consultations finish; native CLI history must be removed separately. No vector database or shared memory across unrelated tasks is used.
 

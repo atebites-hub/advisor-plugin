@@ -263,6 +263,7 @@ class TimeoutPolicyTests(unittest.TestCase):
             request = {"provider": "claude", "workspace": str(root), "host": "test",
                        "session_id": "host", "task_id": "active", "stage": "before_plan",
                        "question": "Can active work finish?", "context": "Fake CLI only."}
+            (root / "config.json").write_text("{}")
             clock = time.monotonic
             started = clock()
             with patch.dict(os.environ):
@@ -271,7 +272,7 @@ class TimeoutPolicyTests(unittest.TestCase):
                 with patch.object(advisor.shutil, "which", return_value=str(executable)), \
                         patch.object(advisor, "PROVIDER_CLEANUP_SECONDS", 1200), \
                         patch.object(advisor.time, "monotonic", side_effect=lambda: (clock() - started) * 4000):
-                    completed = advisor.consult(request, config_path=root / "absent.json",
+                    completed = advisor.consult(request, config_path=root / "config.json",
                                                 state_dir=root / "state", progress_path=root / "progress.json")
             self.assertEqual(completed["advice"], "Keep the active consultation.")
             progress = json.loads((root / "progress.json").read_text())
@@ -281,7 +282,10 @@ class TimeoutPolicyTests(unittest.TestCase):
     def test_configuration_keeps_absolute_optional_and_validates_both_limits(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
-            self.assertEqual(advisor.load_config(path), {})
+            with self.assertRaisesRegex(advisor.AdvisorError, "does not exist"):
+                advisor.load_config(path)
+            path.write_text("{}")
+            self.assertNotIn("timeout_seconds", advisor.load_config(path))
             for key in ("timeout_seconds", "idle_timeout_seconds"):
                 for invalid in (None, True, False, 0, -1, 3601, 1.5, "1200"):
                     with self.subTest(key=key, value=invalid):
@@ -300,6 +304,7 @@ class TimeoutPolicyTests(unittest.TestCase):
             path = root / "config.json"
             request = {"provider": "codex", "workspace": str(root), "host": "test", "session_id": "host",
                        "task_id": "defaults", "stage": "before_plan", "question": "Review", "context": "Fake."}
+            path.write_text("{}")
             advisor.consult(request, config_path=path, state_dir=root / "state")
             self.assertIsNone(provider.call_args.args[5])
             self.assertEqual(provider.call_args.kwargs["idle_timeout_seconds"], 1200)

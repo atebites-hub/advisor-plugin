@@ -5,7 +5,7 @@
 Root OpenAI, Claude, and Cursor marketplace catalogs distribute one plugin, `advisor`. Limit every catalog to it.
 
 - `plugins/advisor/advisor.py`: shared Python CLI, MCP server, provider adapters, and consultation memory.
-- `plugins/advisor/{session_context,review_checkpoints,usage_limits}.py`: scoped capture, checkpoints, and quota evidence.
+- `plugins/advisor/{configuration,session_context,review_checkpoints,usage_limits}.py`: user profiles, scoped capture, checkpoints, and quota evidence.
 - `plugins/advisor/skills/advisor/SKILL.md`: instructions for deciding when and how to consult.
 - `plugins/advisor/.*-plugin/`, `mcp.json`, and `.mcp.json`: host-specific packaging.
 - `tests/`: unit tests and MCP transport tests.
@@ -40,7 +40,7 @@ No commit convention exists. Use imperative subjects, such as `Add consultation 
 
 ## Agent-Specific Constraints
 
-Hooks supply instructions; agents invoke consultations. Preserve the two fixed Max-effort profiles and explicit selection of one advisor. User-enabled `usage_fallback` permits one other fixed profile after verified account exhaustion, within the same job and frozen context. Never switch on ambiguous errors, copy credentials, consult recursively, or commit session data. Distinguish documented compatibility from live-tested support.
+Hooks supply instructions; agents invoke consultations. Users configure enabled models and efforts for the two providers; preserve existing Max defaults. Check `advisor_status` and explicitly choose one enabled advisor; requests cannot override user profiles. User-enabled `usage_fallback` permits the other enabled profile only after verified account exhaustion, within the same job and frozen context. Never switch on ambiguous errors, copy credentials, consult recursively, or commit session data. Distinguish documented compatibility from live-tested support.
 
 ## Using Advisor
 

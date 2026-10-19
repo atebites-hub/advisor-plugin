@@ -25,7 +25,8 @@ class ContextPipelineTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         self.state = self.root / "state"
-        self.config = self.root / "absent.json"
+        self.config = self.root / "config.json"
+        self.config.write_text("{}")
         self.request = {"provider": "codex", "workspace": str(self.root), "host": "zcode",
                         "session_id": "native-session", "task_id": "task", "stage": "before_plan",
                         "question": "Review this", "context": "See native evidence."}

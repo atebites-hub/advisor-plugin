@@ -24,6 +24,7 @@ import tempfile
 import threading
 import time
 
+import configuration
 from session_context import ContextCaptureError, ContextUnavailableError, capture_zcode_context, load_context_snapshot, zcode_context_status
 from usage_limits import prepare_codex_usage, detect_usage
 from review_checkpoints import CheckpointError, attach_dependencies, begin_dependencies, normalize_dependent_paths, register_review, record_review, record_unavailable_review, review_checkpoint, verify_job_scope
@@ -49,10 +50,10 @@ POLICY = (
     "recur, results conflict with expectations, you consider changing approach, "
     "or consequential uncertainty remains. Short reactive tasks whose next "
     "action is dictated by fresh tool output do not need repeated reviews. "
-    "Choose exactly one primary provider per consultation: claude "
-    "(Claude Opus 5.5 Max) or codex (GPT 6.1 Sol Max). Call consult_advisor with "
-    "provider and a focused question. In ZCode first call advisor_status and "
-    "require native_context.recording_mode full_retention for every new consultation. "
+    "First call advisor_status to discover the user's enabled advisor models and efforts. "
+    "Choose exactly one enabled primary provider per consultation: claude or codex. "
+    "Call consult_advisor with provider and a focused question; only users configure models and effort. "
+    "In ZCode require native_context.recording_mode full_retention for every new consultation. "
     "Bounded or unknown recording fails before a snapshot or provider starts. "
     "Supply explicit dependent_paths naming "
     "workspace files/directories awaiting advice, or [] for read-only advice. "
@@ -78,7 +79,7 @@ POLICY = (
     "and optimization. Choose for the specific question. "
     "Use during_task for a completion review. "
     "It returns a background job_id; use read_advice to retrieve the result. "
-    "Max consultations have no default total deadline. The configurable default "
+    "Consultations have no default total deadline. The configurable default "
     "idle limit is 20 minutes without observable provider progress; silent work "
     "can still reach that limit. Explicit total timeouts remain binding. "
     "Pending progress exposes activity counts, never private reasoning. "
@@ -103,7 +104,7 @@ POLICY = (
     "to poll. Advice stays in private local state. Evaluate its recommendations "
     "and verify the resulting change; check conflicting claims against direct "
     "evidence or request a focused follow-up. User-enabled usage_fallback permits "
-    "one alternate fixed Max profile after verified account exhaustion, inside "
+    "one enabled alternate advisor after verified account exhaustion, inside "
     "this same job. Inspect provider_attempts and the answering provider; keep "
     "waiting on that job and retrieve its completed advice. Timeout, auth, "
     "unknown quota, and capture failure never switch. Do not send secrets, "
@@ -159,33 +160,58 @@ def redact(text: str) -> str:
     return re.sub(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*", "Bearer [REDACTED]", text)
 
 
-def load_config(path: Path | None) -> dict:
-    path = path or Path(os.environ.get("ADVISOR_CONFIG", "~/.config/advisor/config.json")).expanduser()
-    if not path.exists():
-        return {}
+def load_config(path: Path | None = None, *, app_settings: bool = True) -> dict:
     try:
-        if path.stat().st_size > 16_384:
-            raise AdvisorError("Advisor configuration is too large.")
-        config = json.loads(path.read_text())
-    except (OSError, ValueError) as exc:
-        raise AdvisorError("Cannot read Advisor configuration as JSON.") from exc
-    if not isinstance(config, dict):
-        raise AdvisorError("Advisor configuration must be a JSON object.")
-    if "provider" in config or "model" in config:
-        name = config.get("provider")
-        if not isinstance(name, str) or name not in PROFILES or config.get("model") != PROFILES[name]:
-            raise AdvisorError("Configuration must select one of the two fixed advisor profiles.")
-    for key, default in (("idle_timeout_seconds", DEFAULT_IDLE_TIMEOUT_SECONDS), ("max_consults_per_task", 5)):
-        value = config.get(key, default)
-        if type(value) is not int or not 1 <= value <= 3600:
-            raise AdvisorError(f"{key} must be an integer from 1 to 3600.")
-    if "timeout_seconds" in config:
-        value = config["timeout_seconds"]
-        if type(value) is not int or not 1 <= value <= 3600:
-            raise AdvisorError("timeout_seconds must be an integer from 1 to 3600 when supplied.")
-    if "usage_fallback" in config and type(config["usage_fallback"]) is not bool:
-        raise AdvisorError("usage_fallback must be a boolean.")
-    return config
+        config = configuration.load_config(path)
+        profiles = configuration.resolved_advisors(config)
+        source = str(configuration.config_path(path))
+        master = os.environ.get("ADVISOR_USE_APP_SETTINGS") if app_settings else None
+        if master not in (None, "true", "false"):
+            raise AdvisorError("ADVISOR_USE_APP_SETTINGS must be true or false.")
+        if master == "true":
+            values = {}
+            for name in PROFILES:
+                prefix = "ADVISOR_" + name.upper() + "_"
+                enabled = os.environ.get(prefix + "ENABLED")
+                if enabled not in ("true", "false"):
+                    raise AdvisorError(prefix + "ENABLED must be true or false when app settings are enabled.")
+                values[name] = {"enabled": enabled == "true", "model": os.environ.get(prefix + "MODEL"),
+                                "effort": os.environ.get(prefix + "EFFORT")}
+            profiles = configuration.resolved_advisors({"advisors": values})
+            source = "Plugin app settings over " + source
+        return {**config, "advisors": profiles, "_configuration_source": source}
+    except configuration.ConfigurationError as exc:
+        raise AdvisorError(str(exc)) from exc
+
+
+def select_provider(request: dict, config: dict, *, explicit: bool = False) -> str:
+    if not isinstance(request, dict):
+        raise AdvisorError("Consultation request must be a JSON object.")
+    if any(key in request for key in ("model", "effort", "advisors", "config", "config_path",
+                                      "usage_fallback", "max_consults_per_task", "timeout_seconds",
+                                      "idle_timeout_seconds", "_config")):
+        raise AdvisorError("Advisor configuration belongs to the user; request overrides are not allowed.")
+    provider = request.get("provider", None if explicit else config.get("provider"))
+    if not isinstance(provider, str) or provider not in PROFILES:
+        raise AdvisorError("Select one advisor explicitly using provider: claude or codex.")
+    if os.environ.get("ADVISOR_ACTIVE"):
+        raise AdvisorError("Nested Advisor consultations are disabled to prevent recursion.")
+    profiles = config["advisors"]
+    if not any(profile["enabled"] for profile in profiles.values()):
+        raise AdvisorError("All advisors are disabled in user configuration; this review is incomplete.")
+    if not profiles[provider]["enabled"]:
+        raise AdvisorError(f"The {provider} advisor is disabled in user configuration.")
+    return provider
+
+
+def consultation_profiles(config: dict, provider: str) -> list:
+    """Include only authority that can affect this consultation's providers."""
+    profiles = config["advisors"]
+    alternate = "codex" if provider == "claude" else "claude"
+    selected = [provider]
+    if config.get("usage_fallback", False) and profiles[alternate]["enabled"]:
+        selected.append(alternate)
+    return [[name, profiles[name]["model"], profiles[name]["effort"]] for name in selected]
 
 
 def validate_request(request: dict) -> dict:
@@ -219,9 +245,10 @@ def bind_native_request(request: dict, scope: dict) -> dict:
             "context": request.get("context", "Review the attached native session snapshot.")}
 
 
-def prepare_request(request: dict, meta: dict, *, state_dir: Path | None = None) -> dict:
-    if not isinstance(request, dict) or request.get("provider") not in PROFILES:
-        raise AdvisorError("Select one advisor explicitly using provider: claude or codex.")
+def prepare_request(request: dict, meta: dict, *, state_dir: Path | None = None,
+                    _config: dict | None = None) -> dict:
+    config = load_config() if _config is None else _config
+    select_provider(request, config, explicit=True)
     if "com.zcode/request-context" in meta:
         if not isinstance(request.get("dependent_paths"), list):
             raise AdvisorError("Native ZCode consultations require explicit dependent_paths: concrete files/directories, or [] for read-only advice.")
@@ -258,22 +285,26 @@ def context_packet(request: dict, state_dir: Path | None = None) -> tuple[dict, 
     return packet, transfer
 
 
-def provider_command(provider: str, model: str, session_id: str | None) -> list[str]:
-    if PROFILES.get(provider) != model:
-        raise AdvisorError("Unknown advisor profile; model substitution is disabled.")
+def provider_command(provider: str, model: str, session_id: str | None, *, effort: str = "max") -> list[str]:
+    try:
+        configuration.validate_model(provider, model)
+        if effort not in configuration.EFFORTS:
+            raise configuration.ConfigurationError("Unsupported advisor effort.")
+    except configuration.ConfigurationError as exc:
+        raise AdvisorError(str(exc)) from exc
     if session_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", session_id):
         raise AdvisorError("The advising CLI returned an invalid session identifier.")
     if provider == "claude":
         command = ["claude", "-p", "--output-format", "stream-json", "--verbose",
                    "--include-partial-messages", "--model", model,
-                   "--effort", "max", "--tools", "", "--disallowedTools", "mcp__*",
+                   "--effort", effort, "--tools", "", "--disallowedTools", "mcp__*",
                    "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                    "--safe-mode", "--setting-sources", "", "--permission-prompts", "none"]
         if session_id:
             command += ["--resume", session_id]
         return command
     command = ["codex", "exec", "--json", "--model", model,
-               "--config", 'model_reasoning_effort="max"',
+               "--config", "model_reasoning_effort=" + json.dumps(effort),
                "--sandbox", "read-only", "--ignore-user-config", "--skip-git-repo-check",
                "--config", "project_doc_max_bytes=0", "--config", 'web_search="disabled"']
     for feature in ("apps", "plugins", "hooks", "shell_tool", "multi_agent", "memories", "browser_use",
@@ -284,7 +315,7 @@ def provider_command(provider: str, model: str, session_id: str | None) -> list[
     return command + ["-"]
 
 
-def parse_response(provider: str, stdout: str) -> tuple[str, str]:
+def parse_response(provider: str, stdout: str, *, expected_model: str | None = None) -> tuple[str, str]:
     try:
         if provider == "claude":
             events = [json.loads(line) for line in stdout.split("\n") if line.strip()]
@@ -295,7 +326,8 @@ def parse_response(provider: str, stdout: str) -> tuple[str, str]:
             if data.get("is_error") or data.get("subtype", "success") != "success":
                 raise AdvisorError("Claude could not complete the consultation.")
             models = data.get("modelUsage", {})
-            if models and any(name != PROFILES["claude"] and not name.startswith(PROFILES["claude"] + "-")
+            model = expected_model or PROFILES["claude"]
+            if models and any(name != model and not name.startswith(model + "-")
                               for name in models):
                 raise AdvisorError("Claude reported a different model; advice was rejected.")
             advice, session_id = data.get("result"), data.get("session_id")
@@ -563,9 +595,10 @@ def capture_process(process: subprocess.Popen, prompt: bytes, timeout: int | Non
 def run_provider(provider: str, model: str, prompt: str, workspace: Path,
                  session_id: str | None, timeout: int | None,
                  progress_path: Path | None = None, question: str | None = None, *,
+                 effort: str = "max",
                  idle_timeout_seconds: int = DEFAULT_IDLE_TIMEOUT_SECONDS,
                  usage_fallback: bool = False, absolute_deadline: float | None = None) -> tuple[str, str]:
-    command = provider_command(provider, model, session_id)
+    command = provider_command(provider, model, session_id, effort=effort)
     executable = shutil.which(command[0])
     if not executable:
         raise AdvisorError(f"Install {command[0]} and sign in before using this advisor.")
@@ -576,7 +609,7 @@ def run_provider(provider: str, model: str, prompt: str, workspace: Path,
         if environment.get("CLAUDE_CODE_SKIP_PROMPT_HISTORY", "").lower() in {"1", "true", "yes", "on"}:
             raise AdvisorError("Claude session persistence is disabled by CLAUDE_CODE_SKIP_PROMPT_HISTORY; Advisor needs resumable history.")
         # Claude's effort environment variable takes precedence over its CLI flag.
-        environment["CLAUDE_CODE_EFFORT_LEVEL"] = "max"
+        environment["CLAUDE_CODE_EFFORT_LEVEL"] = effort
         environment["CLAUDE_CODE_DISABLE_ADVISOR_TOOL"] = "1"
     for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"):
         environment.pop(key, None)
@@ -626,7 +659,7 @@ def run_provider(provider: str, model: str, prompt: str, workspace: Path,
         except UnicodeDecodeError as exc:
             raise AdvisorError("Advising CLI returned invalid UTF-8 output.") from exc
         if usage_fallback and os.name == "posix" and 0 <= process.returncode <= 255:
-            evidence = detect_usage(provider, output, process.returncode, model=model,
+            evidence = detect_usage(provider, output, process.returncode, model=model, effort=effort,
                                     codex_run=codex_run, started_at=started_at,
                                     finished_at=finished_at, deadline=absolute_deadline)
             if evidence is not None:
@@ -636,33 +669,34 @@ def run_provider(provider: str, model: str, prompt: str, workspace: Path,
         if process.returncode:
             detail = redact(stderr.decode("utf-8", errors="replace"))[-1000:]
             raise AdvisorError(f"{provider} advising CLI failed (exit {process.returncode}). {detail}")
-        return parse_response(provider, output)
+        return parse_response(provider, output, expected_model=model)
 
 
 def consult(request: dict, *, config_path: Path | None = None,
-            state_dir: Path | None = None, progress_path: Path | None = None) -> dict:
+            state_dir: Path | None = None, progress_path: Path | None = None,
+            _config: dict | None = None) -> dict:
     started = time.monotonic()
     if os.environ.get("ADVISOR_ACTIVE"):
         raise AdvisorError("Nested Advisor consultations are disabled to prevent recursion.")
+    config = load_config(config_path) if _config is None else _config
+    provider = select_provider(request, config)
     request = validate_request(request)
     packet, transfer = context_packet(request, state_dir)
-    config = load_config(config_path)
-    provider = request.get("provider", config.get("provider"))
-    if not isinstance(provider, str) or provider not in PROFILES:
-        raise AdvisorError("Choose exactly one provider: claude or codex.")
     timeout = config.get("timeout_seconds")
     deadline = started + timeout if timeout is not None else None
     serialized = json.dumps(packet, sort_keys=True, ensure_ascii=False)
+    selected = consultation_profiles(config, provider)
     attempts = []
     enabled = config.get("usage_fallback", False)
     if progress_path is not None:
         journal = progress_path.parent / "provider_attempts.json"
     else:
-        identity = hashlib.sha256((provider + serialized).encode()).hexdigest()
+        identity = hashlib.sha256(json.dumps([2, selected, serialized], sort_keys=True).encode()).hexdigest()
         journal = state_root(state_dir) / "attempts" / (identity + ".json")
 
     def save_attempt(name: str, status: str, **detail):
-        attempts.append({"provider": name, "model": PROFILES[name], "effort": "max", "status": status, **detail})
+        profile = config["advisors"][name]
+        attempts.append({"provider": name, "model": profile["model"], "effort": profile["effort"], "status": status, **detail})
         try:
             journal.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             journal.parent.chmod(0o700)
@@ -671,7 +705,7 @@ def consult(request: dict, *, config_path: Path | None = None,
             raise AdvisorError("Cannot persist Advisor provider attempts; no further provider was started.") from exc
 
     try:
-        for name in (provider, "codex" if provider == "claude" else "claude"):
+        for name, _, _ in selected:
             if deadline is not None and time.monotonic() >= deadline:
                 raise AdvisorError("Advisor's absolute deadline expired; no further provider was started.")
             try:
@@ -683,6 +717,8 @@ def consult(request: dict, *, config_path: Path | None = None,
                 evidence = {key: redact(str(exc.evidence[key]))[:limit] for key, limit in
                             (("code", 96), ("evidence", 160), ("message", 512)) if key in exc.evidence}
                 save_attempt(name, "usage_exhausted", **evidence)
+                if len(selected) == 1:
+                    raise AdvisorError("The advisor reported verified usage exhaustion and no enabled alternate is available; consultation is incomplete.") from exc
                 if name != provider:
                     raise AdvisorError("Both advisors reported verified usage exhaustion; consultation is incomplete.") from exc
                 continue
@@ -704,10 +740,11 @@ def consult(request: dict, *, config_path: Path | None = None,
 def consult_provider(request: dict, provider: str, serialized: str, transfer: dict, config: dict,
                      state_dir: Path | None, progress_path: Path | None,
                      deadline: float | None) -> dict:
-    model = PROFILES[provider]
+    profile = config["advisors"][provider]
+    model, effort = profile["model"], profile["effort"]
     budget = config.get("max_consults_per_task", 5)
     scope = [request[key] for key in ("workspace", "host", "session_id", "task_id")]
-    identity = hashlib.sha256(json.dumps([*scope, provider, model, "max"]).encode()).hexdigest()
+    identity = hashlib.sha256(json.dumps([*scope, provider, model, effort]).encode()).hexdigest()
     root = state_dir or Path(os.environ.get("ADVISOR_STATE_DIR", "~/.local/state/advisor")).expanduser()
     directory = root / identity
     try:
@@ -735,6 +772,7 @@ def consult_provider(request: dict, provider: str, serialized: str, transfer: di
                                             previous[0] if previous else None,
                                             config.get("timeout_seconds"), progress_path,
                                             question=request["question"],
+                                            effort=effort,
                                             idle_timeout_seconds=config.get("idle_timeout_seconds", DEFAULT_IDLE_TIMEOUT_SECONDS),
                                             usage_fallback=config.get("usage_fallback", False),
                                             absolute_deadline=deadline)
@@ -749,7 +787,7 @@ def consult_provider(request: dict, provider: str, serialized: str, transfer: di
             raise AdvisorError("Advisor's absolute deadline expired before consultation commit.")
         connection.commit()
         return {"advice": advice, "advisor_session_id": native_id, "provider": provider,
-                "model": model, "effort": "max", "identity_verified": False,
+                "model": model, "effort": effort, "identity_verified": False,
                 "cached": bool(cached), "remaining_consults": max(0, budget - count),
                 "context_transfer": transfer}
     except sqlite3.OperationalError as exc:
@@ -758,14 +796,16 @@ def consult_provider(request: dict, provider: str, serialized: str, transfer: di
         connection.close()
 
 
-def advisor_status() -> dict:
+def advisor_status(config_path: Path | None = None) -> dict:
     """Report installed CLIs without reading credentials or making model calls."""
-    return {"advisors": {name: {"model": model, "effort": "max", "installed": bool(shutil.which(name))}
-                         for name, model in PROFILES.items()},
+    config = load_config(config_path)
+    return {"advisors": {name: {**profile, "installed": bool(shutil.which(name))}
+                         for name, profile in config["advisors"].items()},
+            "configuration_source": config["_configuration_source"],
             "authentication": "Use each CLI's auth status command; no credentials are read by Advisor.",
             "trigger": "Early and final review checkpoints, recurring errors, approach changes, and uncertainty.",
             "hooks_required": False,
-            "usage_fallback": {"enabled": load_config(None).get("usage_fallback", False),
+            "usage_fallback": {"enabled": config.get("usage_fallback", False),
                                "condition": "Verified account usage exhaustion only; one alternate, same job and context."}}
 
 
@@ -868,7 +908,8 @@ def wait_for_advice(job_id: str, *, state_dir: Path | None = None) -> dict:
 
 
 def frozen_job_config(config: dict, provider: str, *, legacy: bool = False) -> dict:
-    frozen = {"schema_version": 1, "provider": provider, "model": PROFILES[provider],
+    profiles = configuration.resolved_advisors({} if legacy else config)
+    frozen = {"schema_version": 2, "primary_provider": provider, "advisors": profiles,
               "idle_timeout_seconds": config.get("idle_timeout_seconds", DEFAULT_IDLE_TIMEOUT_SECONDS),
               "max_consults_per_task": config.get("max_consults_per_task", 5),
               "usage_fallback": False if legacy else config.get("usage_fallback", False)}
@@ -879,25 +920,23 @@ def frozen_job_config(config: dict, provider: str, *, legacy: bool = False) -> d
 
 
 def submit_consultation(request: dict, *, config_path: Path | None = None,
-                        state_dir: Path | None = None) -> dict:
+                        state_dir: Path | None = None, _config: dict | None = None) -> dict:
     for previous_id, previous_process in list(WORKERS.items()):
         if previous_process.poll() is not None and (job_directory(previous_id, state_dir) / "result.json").exists():
             WORKERS.pop(previous_id, None)
     if os.environ.get("ADVISOR_ACTIVE"):
         raise AdvisorError("Nested Advisor consultations are disabled to prevent recursion.")
+    config = load_config(config_path) if _config is None else _config
+    provider = select_provider(request, config, explicit=True)
     request = validate_request(request)
     assembled, transfer = context_packet(request, state_dir)
-    provider = request.get("provider")
-    if not isinstance(provider, str) or provider not in PROFILES:
-        raise AdvisorError("Select one advisor explicitly using provider: claude or codex.")
-    config = load_config(config_path)
     packet = {key: request[key] for key in ("provider", "workspace", "host", "session_id", "task_id",
                                           "stage", "question", "context")}
     if "context_snapshot_id" in request:
         packet["context_snapshot_id"] = request["context_snapshot_id"]
     if "dependent_paths" in request:
         packet["dependent_paths"] = request["dependent_paths"]
-    serialized = json.dumps([packet, PROFILES[provider], "max"], sort_keys=True, ensure_ascii=False)
+    serialized = json.dumps([2, packet, consultation_profiles(config, provider)], sort_keys=True, ensure_ascii=False)
     job_id = hashlib.sha256(serialized.encode()).hexdigest()
     directory = job_directory(job_id, state_dir)
     try:
@@ -953,16 +992,29 @@ def run_job(job_id: str, *, state_dir: Path | None = None) -> int:
             config_path = directory / "config.json"
             if payload["config_path"] != str(config_path) or not config_path.is_file():
                 raise AdvisorError("Advisor's frozen job configuration is unavailable.")
-            if load_config(config_path).get("schema_version") != 1:
+            config = configuration.load_config(config_path)
+            schema = config.get("schema_version")
+            if schema == 1:
+                if config.get("provider") != payload["request"]["provider"]:
+                    raise AdvisorError("Advisor's frozen primary provider does not match its request.")
+                config["advisors"] = configuration.resolved_advisors({})
+            elif schema == 2:
+                profiles = config.get("advisors")
+                if (config.get("primary_provider") != payload["request"]["provider"]
+                        or not isinstance(profiles, dict) or set(profiles) != set(PROFILES)
+                        or any(set(profile) != {"enabled", "model", "effort"} for profile in profiles.values())):
+                    raise AdvisorError("Advisor's frozen provider profiles are incomplete or inconsistent.")
+            else:
                 raise AdvisorError("Unsupported Advisor job configuration.")
         elif version is None:
-            original_path = Path(payload["config_path"]) if payload["config_path"] else None
+            original_path = configuration.config_path(Path(payload["config_path"]) if payload["config_path"] else None)
             config_path = directory / "legacy-config.json"
-            write_private(config_path, json.dumps(frozen_job_config(
-                load_config(original_path), payload["request"]["provider"], legacy=True)))
+            original = load_config(original_path, app_settings=False) if original_path.exists() else {}
+            config = frozen_job_config(original, payload["request"]["provider"], legacy=True)
+            write_private(config_path, json.dumps(config))
         else:
             raise AdvisorError("Unsupported Advisor job timeout policy.")
-        result = consult(payload["request"], config_path=config_path, state_dir=state_dir,
+        result = consult(payload["request"], config_path=config_path, state_dir=state_dir, _config=config,
                          progress_path=directory / "progress.json")
         write_private(directory / "advice.md", result["advice"] + "\n")
         write_private(directory / "result.json", json.dumps({"status": "completed", **result}, ensure_ascii=False))
@@ -985,7 +1037,8 @@ def build_server():
         and checking the deliverable before declaring a multi-step task done.
         Returns a background job immediately.
 
-        Choose ONE primary provider: claude or codex (both Max). With user-enabled
+        First call advisor_status, then choose ONE enabled primary provider:
+        claude or codex. The user configures each model and effort. With user-enabled
         usage_fallback, verified account exhaustion permits one alternate within
         this same job; provider_attempts records why and provider identifies who
         answered. Keep waiting on this job; no timeout/auth/capture fallback.
@@ -1028,8 +1081,9 @@ def build_server():
         meta = metadata.model_dump(by_alias=True) if metadata is not None else {}
         started_at_ns = time.time_ns()
         attempt_id = os.urandom(16).hex()
+        config = load_config()
         try:
-            prepared = prepare_request(request, meta)
+            prepared = prepare_request(request, meta, _config=config)
         except AdvisorError as exc:
             cause = exc.__cause__
             if not isinstance(cause, ContextUnavailableError) or cause.scope is None:
@@ -1051,7 +1105,7 @@ def build_server():
                 begin_dependencies(prepared["_native_scope"], prepared["dependent_paths"], attempt_id, state_root())
             except CheckpointError as exc:
                 raise AdvisorError(str(exc)) from exc
-        result = submit_consultation(prepared)
+        result = submit_consultation(prepared, _config=config)
         try:
             job = verify_job_scope(result["job_id"], meta, state_root())
             if job is not None:
@@ -1126,11 +1180,16 @@ def build_server():
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Consult one of two separate advising agents.")
-    parser.add_argument("command", choices=("serve", "consult", "doctor", "worker", "wait", "session-start", "review-checkpoint"))
+    parser = argparse.ArgumentParser(description="Configure or consult separate Claude Code and Codex advising agents.")
+    parser.add_argument("command", choices=("serve", "consult", "configure", "doctor", "worker", "wait", "session-start", "review-checkpoint"))
     parser.add_argument("job_id", nargs="?")
+    parser.add_argument("--config", type=Path, help="User configuration file (configure, doctor, or consult).")
     args = parser.parse_args()
     try:
+        if args.config is not None and args.command not in {"configure", "doctor", "consult"}:
+            raise AdvisorError("--config is supported only by configure, doctor, and consult.")
+        if args.command == "configure":
+            return configuration.configure(args.config)
         if args.command == "review-checkpoint":
             try:
                 raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
@@ -1161,14 +1220,14 @@ def main() -> int:
         elif args.command == "serve":
             build_server().run(transport="stdio")
         elif args.command == "doctor":
-            print(json.dumps(advisor_status(), indent=2))
+            print(json.dumps(advisor_status(args.config), indent=2))
         else:
             raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
             if len(raw) > MAX_INPUT_BYTES:
                 raise AdvisorError("Consultation request exceeds 1 MiB.")
-            print(json.dumps(consult(json.loads(raw)), ensure_ascii=False))
+            print(json.dumps(consult(json.loads(raw), config_path=args.config), ensure_ascii=False))
         return 0
-    except (AdvisorError, ValueError, OSError) as exc:
+    except (AdvisorError, configuration.ConfigurationError, ValueError, OSError) as exc:
         print(json.dumps(error_result(exc)), file=sys.stderr)
         return 1
 

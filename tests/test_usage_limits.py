@@ -134,7 +134,7 @@ class UsageLimitTests(unittest.TestCase):
         self.assertIsNotNone(self.detect_stream(self.stdout().rstrip("\n")))
         self.assertIsNotNone(self.detect_claude(self.claude_stream().rstrip("\n")))
 
-    def test_normal_failed_exit_and_fixed_model_are_required(self):
+    def test_normal_failed_exit_and_bound_model_are_required(self):
         self.write_records()
         for status in (-9, True, None, "1"):
             self.assertIsNone(self.detect_stream(self.stdout(), status))
@@ -145,6 +145,37 @@ class UsageLimitTests(unittest.TestCase):
                                   (True, self.finished), (float("nan"), self.finished),
                                   (self.finished, self.started)):
             self.assertIsNone(self.detect(started_at=started, finished_at=finished))
+
+    def test_codex_custom_profile_requires_exact_trusted_model_and_effort(self):
+        records = self.records()
+        records[2]["payload"].update(model="gpt-6-astra", effort="high")
+        self.write_records(records)
+        self.assertIsNotNone(self.detect(model="gpt-6-astra", effort="high"))
+        self.assertIsNone(self.detect(model=MODEL, effort="high"))
+        self.assertIsNone(self.detect(model="gpt-6-astra", effort="max"))
+        self.assertIsNone(self.detect(model="gpt-6-astra"))
+        self.write_records()
+        self.assertIsNone(self.detect(model="gpt-6-astra", effort="high"))
+
+    def test_expected_profile_rejects_unsafe_or_malformed_values(self):
+        self.write_records()
+        for model in (None, True, [], "", "-gpt-6-astra", "gpt-6-astra --unsafe", "gpt\n6",
+                      "gpt\x006", "a" * 129, "models/gpt-6-astra", "gpt:latest"):
+            with self.subTest(model=model):
+                self.assertIsNone(self.detect(model=model))
+                self.assertIsNone(self.detect_claude(model=model))
+        for effort in (None, True, [], "", "MAX", " high", "max\x00", "none", "--max"):
+            with self.subTest(effort=effort):
+                self.assertIsNone(self.detect(effort=effort))
+                self.assertIsNone(self.detect_claude(effort=effort))
+
+    def test_claude_custom_canonical_model_keeps_account_level_typed_proof(self):
+        self.assertIsNotNone(self.detect_claude(model="claude-sonnet-4-6", effort="high"))
+        self.assertIsNone(self.detect_claude(self.claude_stream(api_error_origin="unknown"),
+                                           model="claude-sonnet-4-6", effort="high"))
+        for model in ("opus", "gpt-6-astra", "claude-", "claude-Opus-5-5"):
+            with self.subTest(model=model):
+                self.assertIsNone(self.detect_claude(model=model))
 
     def test_nullable_required_events_cannot_hide_duplicate_native_terminals(self):
         self.write_records()
