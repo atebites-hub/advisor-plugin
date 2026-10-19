@@ -62,7 +62,8 @@ class CursorConfigurationTests(unittest.TestCase):
         self.assertEqual(self.server["args"], ["run", "--script", "${CURSOR_PLUGIN_ROOT}/advisor.py", "serve"])
 
     def test_default_opt_out_keeps_shared_configuration_authoritative(self):
-        with patch.dict(os.environ, self.interpolated(), clear=True):
+        env = self.server["env"] | {"ADVISOR_USE_APP_SETTINGS": "false"}
+        with patch.dict(os.environ, env, clear=True):
             config = advisor.load_config(self.config)
         self.assertFalse(config["advisors"]["claude"]["enabled"])
         self.assertEqual(config["advisors"]["codex"]["effort"], "high")
