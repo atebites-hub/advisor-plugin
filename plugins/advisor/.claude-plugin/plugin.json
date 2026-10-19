@@ -67,6 +67,19 @@
       ]
     }
   },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --script \"${CLAUDE_PLUGIN_ROOT}/advisor.py\" session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
   "mcpServers": {
     "advisor": {
       "command": "uv",
