@@ -7,7 +7,7 @@ Root OpenAI, Claude, and Cursor marketplace catalogs distribute one plugin, `adv
 - `plugins/advisor/advisor.py`: shared Python CLI, MCP server, provider adapters, and consultation memory.
 - `plugins/advisor/{configuration,session_context,review_checkpoints,usage_limits}.py`: user profiles, scoped capture, checkpoints, and quota evidence.
 - `plugins/advisor/skills/{advisor,advisor-setup}/SKILL.md`: consultation and user-guided setup instructions.
-- `scripts/export_muse.py`: native Muse package export from shared public sources.
+- `scripts/export_{muse,antigravity}.py`: native bundles using the shared public-file exporter.
 - `plugins/advisor/.*-plugin/`, `mcp.json`, and `.mcp.json`: host-specific packaging.
 - `tests/`: unit tests and MCP transport tests.
 - `docs/compatibility.md`: installation routes and host limitations.

@@ -1,6 +1,6 @@
 {
   "name": "advisor",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints.",
   "author": {
     "name": "Advisor contributors"
@@ -66,6 +66,19 @@
         "max"
       ]
     }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --script \"${CLAUDE_PLUGIN_ROOT}/advisor.py\" session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   },
   "mcpServers": {
     "advisor": {

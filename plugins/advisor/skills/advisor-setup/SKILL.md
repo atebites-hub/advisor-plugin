@@ -22,6 +22,8 @@ Resolve the installed plugin root, two directories above this skill's directory,
 
 `ADVISOR_CONFIG` must reach the MCP process to select its file; a terminal can have a different environment. Native Muse plugins remove custom `ADVISOR_*` variables and use the default file. Compare the reported configuration source before choosing a target. A custom path in Muse requires its manual MCP route; writing another file alone will not change its native server.
 
+Cursor CLI does not apply the plugin's variable defaults. To use the shared file, launch a fresh CLI session with `ADVISOR_USE_APP_SETTINGS=false cursor-agent --plugin-dir "/absolute/plugin/root"`. The native plugin does not forward custom `ADVISOR_CONFIG` or `ADVISOR_STATE_DIR`; use its default shared file or the manual MCP route for custom paths. Cursor dashboard variables are a separate configuration route.
+
 Run the existing command with resolved absolute paths, quoted for the shell:
 
 ```sh

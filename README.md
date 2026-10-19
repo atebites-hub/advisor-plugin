@@ -21,7 +21,7 @@ These defaults follow the [Claude CLI reference](https://code.claude.com/docs/en
 4. ZCode alerts the agent at a model boundary or wakes it when idle. The worker promptly retrieves completed advice with `read_advice` before making dependent decisions; a Markdown copy stays in private local state.
 5. The working agent evaluates the advice, verifies its decisions, and continues its own task.
 
-**ZCode includes a session-start hook** that puts the review checkpoints into the worker's context before its first turn and after supported session resets. Muse's native export also declares a startup instruction hook. These hooks only supply instructions; they never call an advisor. The working agent must invoke the tool and complete the reviews. Other hosts can use the [startup instruction snippet](docs/agent-instructions.md) in their project or user instructions. Installing an MCP tool or a skill alone does not guarantee the full rule is loaded.
+**ZCode and Claude packages include session-start hooks** that put review checkpoints into the worker's context. The native Muse and Antigravity exports also declare startup instruction hooks. These hooks only supply instructions; they never call an advisor. The working agent must invoke the tool and complete the reviews. Other hosts can use the [startup instruction snippet](docs/agent-instructions.md) in their project or user instructions. Installing an MCP tool or a skill alone does not guarantee the full rule is loaded.
 
 Version 0.2.9 requires native ZCode requests to declare `dependent_paths`: concrete workspace files or directories awaiting advice; use `[]` only for read-only advice. Named-edit hooks hold those paths across turns until the exact job's completed advice is retrieved through native `read_advice`. Failed, unavailable, and completed-but-unread results do not release them. Independent named edits remain allowed; shell commands, delegation, and semantic decisions remain policy-only boundaries. Early/final review and waiter rules still apply. See [checkpoint details](docs/agent-instructions.md).
 
@@ -44,11 +44,13 @@ In Claude Code or the local Claude Desktop Code tab, add this GitHub marketplace
 /plugin install advisor@advisor
 ```
 
-The GitHub repository is `advisor-plugin`; the marketplace and plugin IDs remain `advisor`. This follows the [documented GitHub marketplace route](https://code.claude.com/docs/en/plugins/host-marketplace#host-your-marketplace); installation from this new remote has not yet been verified in a host. For the tested ZCode route, clone the repository and add that checkout in Plugin Marketplace.
+The GitHub repository is `advisor-plugin`; the marketplace and plugin IDs remain `advisor`. This follows the [documented GitHub marketplace route](https://code.claude.com/docs/en/plugins/host-marketplace#host-your-marketplace). For the tested ZCode route, clone the repository and add that checkout in Plugin Marketplace. See the [native acceptance report](docs/harness-acceptance.md) for versioned installation and agent-test results.
 
 The first run resolves the locked MCP dependency and Python runtime. `doctor` checks executable availability; it does not verify authentication or model access. Native plugin support and manual MCP setup for **all 11 requested environments** are listed in [Host compatibility](docs/compatibility.md). Some hosts require manual MCP configuration rather than a native plugin import. Nothing is installed into those hosts automatically.
 
 Muse Code needs a separate native bundle to activate MCP and its startup hook. Generate it from this checkout with `uv run --python 3.11 python scripts/export_muse.py /absolute/new/output`, then follow [Muse installation and verification](docs/muse-integration.md). The exporter copies only public runtime files and skills; it does not install anything or change user settings.
+
+Antigravity Desktop and CLI use `uv run --python 3.11 python scripts/export_antigravity.py /absolute/new/output`. Follow [Antigravity installation](docs/antigravity-integration.md), including the CLI readiness check before submitting a task. Both exporters require a new destination outside this repository.
 
 Before every new native ZCode consultation, call MCP `advisor_status` and require `native_context.recording_mode: "full_retention"`. From 0.2.10, consultation rechecks its own bound record. If the current history is complete but recording is `bounded` or `unknown`, a readiness error creates no snapshot, job, or dependency hold. Enable full recording with user approval unless already authorized, then make a new full request. Status and retrieval of existing advice remain available. `doctor` still checks executables only.
 
@@ -63,6 +65,8 @@ The packaged `advisor-setup` skill guides configuration through the existing int
 In ZCode, open **Settings → Plugins → Advisor → Advanced details → Configuration**. Keep `use_app_settings` enabled to use the plugin's controls: `claude_enabled`, `claude_model`, `claude_effort`, and the matching `codex_*` fields. Save configuration, then start a fresh session if the existing MCP process still reports the old values. `advisor_status` shows the effective enabled profiles without making a model call.
 
 Claude Code exposes the same controls in `/config` through its [plugin `userConfig` support](https://code.claude.com/docs/en/plugins-reference). Cursor declares them as [plugin variables](https://cursor.com/docs/reference/plugins), configurable by team administrators from dashboard **Plugins → Configure**. Cursor uses the uppercase `ADVISOR_*` field names and string choices `true`/`false`. Individual Cursor and Cursor CLI configuration UIs remain unverified.
+
+Cursor CLI requires an explicit mode because it does not apply the manifest's variable defaults. For the default shared configuration file, start a fresh session with `ADVISOR_USE_APP_SETTINGS=false cursor-agent --plugin-dir "/absolute/path/advisor-plugin/plugins/advisor"`. Its native plugin does not forward custom `ADVISOR_CONFIG` or `ADVISOR_STATE_DIR`; use manual MCP configuration for custom paths. Verify the CLI executable: another installed tool may also be named `agent`.
 
 The new Claude and Cursor adapters default app overrides **off**, preserving shared settings on installation. Enable `use_app_settings` (Cursor: `ADVISOR_USE_APP_SETTINGS`) to replace **both** advisor profiles with that app's complete set of controls, including enabled flags. ZCode retains its existing default of app overrides on. Review both profiles before enabling overrides: their initial defaults enable both providers.
 
@@ -95,7 +99,7 @@ ChatGPT's structured settings protocol needs its own adapter; Advisor currently 
 
 ## Request advice
 
-The MCP tool is `consult_advisor`, with one `request` object. Choose one provider and state the review question. An accepted consultation returns a job ID promptly. In ZCode, immediately launch exactly one `completion_watcher.input` through its named `Bash` tool with `run_in_background: true`. Its completion notification prompts `read_advice(job_id)`; the waiter returns readiness only, never advice or a retrieval receipt. Continue independent work while waiting and hold dependent work until advice is retrieved and evaluated. Without a supported native waiter, poll after `poll_after_seconds`. Other hosts have no verified push delivery. Read the existing job after a host timeout rather than resubmitting it.
+The MCP tool is `consult_advisor`, with one `request` object. Choose one provider and state the review question. An accepted consultation returns a job ID promptly. In ZCode, immediately launch exactly one `completion_watcher.input` through its named `Bash` tool with `run_in_background: true`. Its completion notification prompts `read_advice(job_id)`; the waiter returns readiness only, never advice or a retrieval receipt. Continue independent work while waiting and hold dependent work until advice is retrieved and evaluated. Without a supported native waiter, poll after `poll_after_seconds`. Other hosts require polling unless their native background notifications are verified. Read the existing job after a host timeout rather than resubmitting it.
 
 Native requests include the dependency declaration, for example:
 

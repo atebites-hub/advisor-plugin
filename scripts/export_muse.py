@@ -7,51 +7,17 @@ import json
 from pathlib import Path
 import sys
 
+if __package__:
+    from .export_bundle import prepare_export, write_export
+else:
+    from export_bundle import prepare_export, write_export
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-FILES = (
-    "advisor.py", "advisor.py.lock", "configuration.py", "session_context.py",
-    "review_checkpoints.py", "usage_limits.py", "skills/advisor/SKILL.md",
-    "skills/advisor-setup/SKILL.md",
-)
-
-
-def read_source(repository: Path, relative: str) -> bytes:
-    path = repository
-    for part in Path("plugins/advisor", relative).parts:
-        path /= part
-        if path.is_symlink():
-            raise ValueError(f"Source contains a symlink: {path}")
-    if not path.is_file():
-        raise ValueError(f"Source must be an existing regular file: {path}")
-    return path.read_bytes()
 
 
 def export_muse(destination: Path) -> Path:
-    repository = REPOSITORY_ROOT.resolve(strict=True)
-    if not destination.is_absolute():
-        raise ValueError("Destination must be an absolute path to a new directory.")
-    try:
-        destination.lstat()
-    except FileNotFoundError:
-        pass
-    else:
-        raise FileExistsError(f"Destination already exists: {destination}")
-    parent = destination.parent.resolve(strict=True)
-    if not parent.is_dir():
-        raise ValueError("Destination parent must be an existing directory.")
-    destination = parent / destination.name
-    if destination.is_relative_to(repository) or repository.is_relative_to(destination):
-        raise ValueError("Destination must not overlap the repository.")
-
-    # Read the fixed inventory before reserving output; unrelated repository files never enter the bundle.
-    contents = {relative: read_source(repository, relative) for relative in FILES}
-    metadata = json.loads(read_source(repository, "plugin.json"))
-    if not isinstance(metadata, dict) or any(
-        not isinstance(metadata.get(key), str) or not metadata[key].strip()
-        for key in ("version", "description")
-    ):
-        raise ValueError("Shared plugin manifest requires non-empty version and description strings.")
+    destination, contents, metadata = prepare_export(REPOSITORY_ROOT, destination)
     manifest = {
         "schemaVersion": 1,
         "name": "advisor",
@@ -76,15 +42,8 @@ def export_muse(destination: Path) -> Path:
         },
     }
 
-    destination.mkdir()
-    for directory in (".muse-plugin", "skills", "skills/advisor", "skills/advisor-setup"):
-        (destination / directory).mkdir()
-    # Publish the native marker last; a failed export remains visibly incomplete and is never removed.
     contents[".muse-plugin/plugin.json"] = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
-    for relative, data in contents.items():
-        with (destination / relative).open("xb") as output:
-            output.write(data)
-    return destination
+    return write_export(destination, contents)
 
 
 def main() -> int:

@@ -50,7 +50,12 @@ POLICY = (
     "until you retrieve completed advice and evaluate it. "
     "For tasks longer than a few straightforward steps, complete an early "
     "review and a final review. Save the deliverable and run relevant checks, "
-    "then consult before declaring the task done. Also consult when errors "
+    "then consult before declaring the task done. After submitting work for "
+    "final review, any deliverable edit, including tests, documentation, or "
+    "advisor-suggested changes, requires fresh relevant checks and another "
+    "final consultation on the updated work before completion. This applies "
+    "in the same turn or later, even after qualified or limited advice. "
+    "Also consult when errors "
     "recur, results conflict with expectations, you consider changing approach, "
     "or consequential uncertainty remains. Short reactive tasks whose next "
     "action is dictated by fresh tool output do not need repeated reviews. "
@@ -92,8 +97,7 @@ POLICY = (
     "attempts; independent edits remain allowed. Hooks cannot infer semantic "
     "dependencies or mediate arbitrary shell/delegated writes. "
     "If checkpoint state is unavailable, report the failure; do not "
-    "bypass the checkpoint through shell commands or other tools. Planned tasks also need "
-    "a fresh final review after the latest edit. Report unavailable reviews as "
+    "bypass the checkpoint through shell commands or other tools. Report unavailable reviews as "
     "incomplete rather than retrying or claiming they passed. "
     "In ZCode, immediately start the returned completion_watcher once using "
     "Bash with run_in_background: true and the supplied command/description. "
@@ -1188,10 +1192,14 @@ def main() -> int:
     parser.add_argument("command", choices=("serve", "consult", "configure", "doctor", "worker", "wait", "session-start", "review-checkpoint"))
     parser.add_argument("job_id", nargs="?")
     parser.add_argument("--config", type=Path, help="User configuration file (configure, doctor, or consult).")
+    parser.add_argument("--hook-format", choices=("claude", "antigravity"),
+                        help="Startup hook output format (session-start only; default: claude).")
     args = parser.parse_args()
     try:
         if args.config is not None and args.command not in {"configure", "doctor", "consult"}:
             raise AdvisorError("--config is supported only by configure, doctor, and consult.")
+        if args.hook_format is not None and args.command != "session-start":
+            raise AdvisorError("--hook-format is supported only by session-start.")
         if args.command == "configure":
             return configuration.configure(args.config)
         if args.command == "review-checkpoint":
@@ -1217,10 +1225,12 @@ def main() -> int:
             print(json.dumps(wait_for_advice(args.job_id)))
             return 0
         if args.command == "session-start":
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "SessionStart",
-                "additionalContext": "Advisor SessionStart instructions\n" + POLICY,
-            }}))
+            policy = "Advisor SessionStart instructions\n" + POLICY
+            if args.hook_format == "antigravity":
+                output = {"injectSteps": [{"systemMessage": {"systemMessage": policy}}]}
+            else:
+                output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": policy}}
+            print(json.dumps(output))
         elif args.command == "serve":
             build_server().run(transport="stdio")
         elif args.command == "doctor":

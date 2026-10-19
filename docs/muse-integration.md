@@ -39,7 +39,11 @@ The hook supplies instructions; the working agent chooses one enabled advisor an
 
 ## Verification boundaries
 
-See [host settings verification](host-settings.md) for versioned installation evidence. Package validation establishes declared capabilities, not autonomous consultation, advice application, or model access. Inspect current diagnostics after execution; an enabled capability row alone does not establish a healthy MCP connection.
+Muse Code **1.4.9** passed native installation, approval, startup-hook execution, unchanged package hashes, and a TUI `/mcp` connection exposing all three tools. Its separate `mcpServer/list` response was empty, so use the native TUI connection state rather than that projection alone. See [host settings verification](host-settings.md) and [native acceptance](harness-acceptance.md#muse-code).
+
+A single real working-model request to `muse-spark-1.3-contributor` failed before any output with HTTP 402 billing verification. No Advisor job or fixture edit occurred. The billing-failed request and the later correctly approved TUI check are separate evidence; host-routed tool invocation and autonomous advice use remain unverified until the account can run its working model. Advisor's Codex advising subscription does not supply Muse's working-model access.
+
+Package validation establishes declared capabilities; connection establishes transport. Neither proves consultation, advice application, or account/model access. Inspect current diagnostics after execution.
 
 Advisor's direct-script entry point disables bytecode generation so runtime imports leave installed package files unchanged. It does not delete caches from earlier experimental bundles. Export and install a fresh bundle rather than treating an already changed cache as approved.
 

@@ -7,7 +7,7 @@ description: Review plans before substantive work and saved, tested deliverables
 
 After orientation, gather evidence and consult before substantive work. Defer dependent decisions/edits until advice arrives; continue independent work.
 
-Multistep tasks require early and final reviews. Save and test before final consultation; retrieve and evaluate advice before declaring done.
+Multistep tasks need early and final reviews. Save and test first. Any deliverable edit after submitting final review, including tests/docs or suggested edits, requires checks and a new final consultation. Read and evaluate completed advice before declaring done.
 
 Also consult for recurring errors, unexpected results, approach changes, or consequential uncertainty. Short reactive tasks need no repeated reviews.
 
@@ -31,9 +31,9 @@ Read source, contracts, and test output into the conversation; paths alone suppl
 
 ZCode named-edit hooks block declared paths across turns until that exact job's completed advice is retrieved. Pending, failed, interrupted, unavailable, and completed-but-unread results never release them. Submission failure keeps the boundary; another job cannot replace it. Independent paths remain editable. Declare actual dependencies; never hide them with `[]` or bypass through shell, JavaScript, delegation, or other tools. Hooks cannot judge semantic decisions or arbitrary commands. Send consultation and edits in separate batches; evaluate advice before dependent work.
 
-An early `before_plan`, `after_plan`, or `before_task` review arms final review after edits in its turn. Save and test before that review; further edits require new final review. Continue this policy after an idle wake even though receipts stay in their original turn. Stop checks outstanding jobs and local freshness; old advice cannot review new edits. Reactive `during_task`-only tasks need no repeated reviews. An uncompleted job means incomplete review; never resubmit it to recover.
+An early `before_plan`, `after_plan`, or `before_task` review arms final review after edits in its turn. Save and test before that review. Continue this policy after an idle wake even though receipts stay in their original turn. Stop checks outstanding jobs and local freshness; old advice cannot review new edits. Reactive `during_task`-only tasks need no repeated reviews. An uncompleted job means incomplete review; never resubmit it to recover.
 
-In **other hosts or the standalone CLI**, pass the explicit packet below. Automatic context capture is currently implemented only for ZCode.
+In **other hosts or the standalone CLI**, supply this packet; only ZCode captures context automatically.
 
 | Field | Value |
 | --- | --- |
@@ -56,7 +56,7 @@ Omit secrets and unrelated personal data. Native capture reads only the selected
 
 The waiter reports readiness, never advice or retrieval. ZCode sends its native completion notification at the next model boundary, or wakes an idle agent. On notification, promptly call `read_advice(job_id)` and evaluate the result before resuming dependent work. Hooks remind you of unread results. Notifications never count as advice retrieval.
 
-Without a native waiter, poll `read_advice` after `poll_after_seconds`, between independent tasks and before dependent work. Other hosts have no verified push delivery. Never resubmit to poll. With a verified running waiter, you may yield with an explicit pending/incomplete report; never claim completion with outstanding advice. Cross-turn reads require the same workspace/session; receipts stay with the original turn and cannot satisfy another turn's review.
+Without a native waiter, poll `read_advice` after `poll_after_seconds`, between independent tasks and before dependent work. Use native background notifications only when verified. Never resubmit to poll. With a verified running waiter, you may yield with an explicit pending/incomplete report; never claim completion with outstanding advice. Cross-turn reads require the same workspace/session; receipts stay with the original turn and cannot satisfy another turn's review.
 
 Native capture can return `unavailable` without a job or provider call. Report incomplete review; never substitute a manual summary, older snapshot, invented IDs, or another provider. Declared dependencies remain blocked.
 
