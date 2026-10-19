@@ -24,6 +24,10 @@ import tempfile
 import threading
 import time
 
+if __name__ == "__main__":
+    # Installed plugin files must stay unchanged for host approval digests.
+    sys.dont_write_bytecode = True
+
 import configuration
 from session_context import ContextCaptureError, ContextUnavailableError, capture_zcode_context, load_context_snapshot, zcode_context_status
 from usage_limits import prepare_codex_usage, detect_usage

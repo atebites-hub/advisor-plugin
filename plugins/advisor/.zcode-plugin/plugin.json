@@ -1,6 +1,6 @@
 {
   "name": "advisor",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints.",
   "hooks": {
     "SessionStart": [
