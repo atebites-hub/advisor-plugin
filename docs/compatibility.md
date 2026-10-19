@@ -1,5 +1,7 @@
 # Host compatibility
 
+**0.3.3 adds a native Muse export and OpenAI setup onboarding.** Muse 1.4.9 passed isolated install, approval, startup-hook, cached-process launch, and package-integrity checks; a separate SDK client verified the installed MCP server. Codex CLI 0.162.1 discovered both skills, MCP, and onboarding metadata. Host-routed Muse tool use and GUI setup remain unverified. All 293 tests pass on Python 3.11 and 3.12. See [versioned verification](host-settings.md#033-openai-onboarding).
+
 **0.3.1 native configuration is installed and package-verified in ZCode 3.16.1.** A directed 0.3.0 session discovered GUI-selected Astra Max, completed and retrieved two reviews, used their critique, and finished with six unchanged tests passing. A neutral small-task attempt skipped consultation, so unprompted triggering is not established. All 269 plugin tests pass on Python 3.11 and 3.12. See the [versioned test report](zcode-smoke-test.md#031-configurable-advisors-october-19-2026).
 
 **0.2.10 installation and the native Claude advice lifecycle passed.** All twelve packaged files matched source; 148 plugin tests and the lock check passed. A neutral read-only UX task independently requested two Claude reviews, waited, retrieved both original results, and applied critique before finishing. Its 490-word specification plus preamble exceeded the full-response limit at 511 words. This is a lifecycle check, with that output-format miss; see the [test report](zcode-smoke-test.md). Every new native ZCode consultation requires full recording. A separately authorized historical check verified full retention at 91 messages with Desktop recording enabled; each installation needs its own consent and readiness check. Advisor checks each consultation's bound record but never writes global host settings.
@@ -22,14 +24,14 @@ The host and advisor provider are separate choices. Every host connects to the s
 | --- | --- | --- |
 | Cursor | Portable `plugin.json` plus `.cursor-plugin/plugin.json`; add this repository as a plugin marketplace or load the local package. [Plugin reference](https://cursor.com/docs/reference/plugins) | Install and skill invocation untested. |
 | ZCode | `.zcode-plugin/plugin.json` with shared skill, stdio MCP, native context adapter, and startup/edit/post-tool/Stop hooks. [Plugins](https://zcode.z.ai/en/docs/plugin) | 0.3.1 GUI controls installed; directed Astra Max lifecycle verified on 0.3.0. Earlier natural trials remain separate. Every new native consultation requires verified full retention; standalone CLI 0.16.9 lacked a supported override. Git-source installation and dependable unprompted triggering remain unverified. |
-| ChatGPT desktop app | Portable plugin manifest, `mcp.json`, and `.agents/plugins/marketplace.json` target OpenAI plugin-capable surfaces. [OpenAI plugins](https://developers.openai.com/plugins/build/plugins) | Availability depends on the ChatGPT surface/account. Ordinary chat is not assumed to support a local process or every coding-agent capability. |
+| ChatGPT desktop app | Portable plugin manifest, `mcp.json`, `.agents/plugins/marketplace.json`, and an onboarding entry point to `advisor-setup`. [OpenAI plugins](https://developers.openai.com/plugins/build/plugins) | Local plugin-capable threads only; availability depends on the surface/account. GUI setup invocation is untested. Ordinary cloud chat is not assumed to start local CLIs. |
 | Claude desktop app | Its **Code tab**, when using the local Claude Code environment, supports Claude plugins. Ordinary desktop chat uses local MCP configuration or MCPB extensions. [Code tab](https://code.claude.com/docs/en/desktop), [desktop MCP](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) | No MCPB bundle supplied. Cloud/remote execution has different capabilities. |
-| Antigravity desktop app | Manual stdio MCP connection and shared skill; see setup below. Google documents native plugin packages and app/CLI synchronization. [Plugins](https://antigravity.google/docs/plugins) | Its required root manifest conflicts with the portable manifest. No native Antigravity package is advertised. |
-| Muse Code | Meta's terminal/CI agent; install the portable package for its skill and configure MCP separately. [Muse plugins](https://meta-models.github.io/muse-code-sdk/next/guides/plugins/), [format compatibility](https://meta-models.github.io/muse-code-sdk/next/guides/plugins/concepts/compatibility/) | Developer Preview. Portable MCP is inactive, and the root portable manifest takes precedence over native overlays. |
+| Antigravity desktop app | Manual stdio MCP connection and shared skill; see setup below. Google documents native plugin packages and app/CLI synchronization. [Plugins](https://antigravity.google/docs/plugins) | Native formats differ; MCP plugin cwd/root substitution remains unverified. Its permissive validator does not establish runtime compatibility. No native package is advertised. |
+| Muse Code | Export a native bundle with `scripts/export_muse.py`; it declares both skills, one SessionStart hook, and the shared stdio MCP server. [Muse guide](muse-integration.md), [format compatibility](https://meta-models.github.io/muse-code-sdk/next/guides/plugins/concepts/compatibility/) | Developer Preview. The portable source package still loads only skills; native export is required for MCP/hooks. Full context capture, edit holds, notifications, and autonomous advice use are not supplied. |
 | Antigravity CLI | `agy` supports stdio MCP; configure it manually below. Native plugins can be installed from a GitHub URL/local directory. [MCP](https://antigravity.google/docs/mcp/), [plugins](https://antigravity.google/docs/plugins) | Named marketplace installation documents only `antigravity-plugins-official`; this release uses manual MCP. |
 | Grok Build CLI | Reuses the Claude plugin and marketplace; Grok documents automatic Claude-format compatibility. [Skills, plugins, marketplaces](https://docs.x.ai/build/features/skills-plugins-marketplaces) | Native install untested. Skill frontmatter `model`/`effort` does not select the advisor provider. |
 | Cursor CLI | Load the package using `agent --plugin-dir /absolute/path/to/advisor/plugins/advisor`. [CLI parameters](https://cursor.com/docs/cli/reference/parameters) | Plugin/model support varies by installed build. |
-| Codex CLI | Portable plugin and OpenAI marketplace descriptor; MCP can also be registered manually. [OpenAI plugins](https://developers.openai.com/plugins/build/plugins) | Verify plugin capability in the installed CLI; local MCP does not imply every plugin feature. |
+| Codex CLI | Portable plugin, OpenAI marketplace descriptor, and `advisor-setup` onboarding. [OpenAI plugins](https://developers.openai.com/plugins/build/plugins) | CLI 0.162.1 discovers both skills, MCP, and enabled onboarding metadata in an isolated installation. GUI/setup conversation execution remains untested. |
 | Claude Code | Native `.claude-plugin/plugin.json`, shared `.mcp.json`, skill, and repository marketplace. Its inline MCP entry supplies native settings. [Plugin reference](https://code.claude.com/docs/en/plugins-reference), [marketplaces](https://code.claude.com/docs/en/plugin-marketplaces) | Requires local provider setup; no host consultation lifecycle validation yet. |
 
 ## Advisor configuration
@@ -39,7 +41,7 @@ Plugin configuration UIs exist, but their schemas and execution surfaces differ:
 | Host | Documented native configuration route | Advisor support in this change |
 | --- | --- | --- |
 | ZCode | Plugin `userConfig` fields in Settings → Plugins → Advisor → Advanced details → Configuration. [Configuration](https://zcode.z.ai/en/docs/plugin#configure-plugins) | Enabled/model/effort controls for both providers, plus `use_app_settings`. |
-| ChatGPT | A Plugin settings extension exposes product-specific settings inside ChatGPT. [Extensions](https://developers.openai.com/plugins/build/extensions) | Native Advisor settings adapter deferred. |
+| ChatGPT | A Plugin settings extension exposes product-specific settings inside ChatGPT. [Extensions](https://developers.openai.com/plugins/build/extensions) | Advisor supplies onboarding to the shared wizard; a structured settings panel is deferred. UI-only tool visibility is not treated as authorization to write local configuration. |
 | Claude Code | Plugin `userConfig` exposes fields in `/config`, including boolean switches and effort option pickers. [Reference](https://code.claude.com/docs/en/plugins-reference) | Seven controls and a complete inline MCP definition; overrides default off. The option-picker feature is documented from 2.1.271. Ordinary Claude Desktop chat is a separate surface. |
 | Cursor | Plugin `variables` schema; team administrators configure values from the Plugins dashboard. [Reference](https://cursor.com/docs/reference/plugins) | Seven uppercase `ADVISOR_*` controls forwarded through Cursor's MCP file; overrides default off. Boolean choices are strings. Individual/CLI UI and runtime interpolation remain unverified. |
 
@@ -48,6 +50,8 @@ In ZCode, `use_app_settings` defaults to true: `claude_enabled`, `claude_model`,
 Claude Code and Cursor start with app overrides off, so a newly installed adapter respects shared disabled providers. Enabling their master switch replaces both complete profiles; inspect both enabled flags first. Claude uses lower-case `userConfig` names; Cursor uses uppercase environment names and `true`/`false` string choices. Their host-specific placeholders never enter the neutral portable MCP files. Existing jobs retain their frozen configuration. See [settings verification](host-settings.md).
 
 The shared setup works through the existing MCP service: run `uv run --script plugins/advisor/advisor.py configure`, or edit `~/.config/advisor/config.json`. `configure --config /absolute/path/advisor.json` writes another file; set `ADVISOR_CONFIG` on the MCP process to load it. Timeouts, budgets, and handoff permission stay in the shared file even when an app controls the profiles. See [examples and precedence](../README.md#configure-advisors). ChatGPT's native settings adapter and full host integration remain deferred.
+
+Muse native plugin processes remove custom `ADVISOR_*` environment variables. Use the default shared configuration file for that route; custom environment-based configuration requires its manual MCP settings route. Its setup skill does not add a native settings GUI. Always compare the effective `advisor_status` source with the intended file.
 
 Only enabled profiles may receive new calls or quota handoffs. With both disabled, report required reviews incomplete rather than claiming approval. Existing jobs retain their frozen settings and remain readable after configuration changes. Efforts are validated against `low`, `medium`, `high`, `xhigh`, and `max`; provider/account support still needs verification.
 
@@ -81,14 +85,17 @@ For every new native ZCode consultation in 0.2.10, enable Desktop **Settings →
 
 On the tested installation, native model-I/O files use `0644` permissions and directories `0755`. Header/media sanitization still runs, but native reasoning remains. Advisor's sanitized copies use `0600` files and `0700` directories; those protections do not change native logs. See the [context-transfer contract](context-transfer.md).
 
-Muse can load the skill from the local package:
+Muse needs the native export to activate the MCP server and startup hook:
 
 ```sh
-muse plugins validate /absolute/path/to/advisor/plugins/advisor
-muse plugins install /absolute/path/to/advisor/plugins/advisor
+uv run --python 3.11 python scripts/export_muse.py /absolute/new/advisor-muse
+muse plugins validate /absolute/new/advisor-muse --json
+muse plugins install /absolute/new/advisor-muse --scope user
 ```
 
-Then configure the MCP service explicitly. Muse's portable package import does not activate the packaged MCP server. Its native overlay cannot override the authoritative portable root manifest. [Import rules](https://meta-models.github.io/muse-code-sdk/next/guides/plugins/concepts/compatibility/)
+Use an existing real parent directory and a new destination outside this repository. Only use the bundle after the exporter exits successfully; failed writes leave partial output for inspection. Inspect and approve capabilities through Muse before starting a fresh session. See [the Muse guide](muse-integration.md) for configuration and verification limits. Installing the original portable source directly still loads only skills.
+
+If you install the original portable source instead, configure MCP separately using the manual route below. Its native overlay cannot override the authoritative portable root manifest. [Import rules](https://meta-models.github.io/muse-code-sdk/next/guides/plugins/concepts/compatibility/)
 
 ## Manual MCP setup
 

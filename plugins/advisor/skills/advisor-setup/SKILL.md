@@ -9,7 +9,7 @@ Use this workflow for the user's Advisor setup or configuration request. Keep ex
 
 ## Choose profiles
 
-Call `advisor_status` to inspect effective profiles and their configuration source. It makes no model calls. Each provider has `enabled`, `model`, and `effort` settings:
+If available, call `advisor_status` to inspect effective profiles and their configuration source. It makes no model calls. Each provider has `enabled`, `model`, and `effort` settings:
 
 - `claude` uses the installed, signed-in Claude Code CLI; its default is `claude-opus-5-5` with `max` effort.
 - `codex` uses the installed, signed-in Codex CLI; its default is `gpt-6.1-sol` with `max` effort.
@@ -19,6 +19,8 @@ Both providers are enabled by default. Users may disable either or both. Use exp
 ## Save through the existing wizard
 
 Resolve the installed plugin root, two directories above this skill's directory, and locate `advisor.py`. The shared file is `~/.config/advisor/config.json`, unless a nonempty `ADVISOR_CONFIG` selects another path. Show the resolved absolute file path and proposed profile changes without exposing unrelated private values.
+
+`ADVISOR_CONFIG` must reach the MCP process to select its file; a terminal can have a different environment. Native Muse plugins remove custom `ADVISOR_*` variables and use the default file. Compare the reported configuration source before choosing a target. A custom path in Muse requires its manual MCP route; writing another file alone will not change its native server.
 
 Run the existing command with resolved absolute paths, quoted for the shell:
 
