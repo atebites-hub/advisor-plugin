@@ -1,0 +1,14 @@
+{
+  "name": "advisor",
+  "owner": {
+    "name": "Advisor contributors"
+  },
+  "plugins": [
+    {
+      "name": "advisor",
+      "version": "0.2.14",
+      "source": "./plugins/advisor",
+      "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints."
+    }
+  ]
+}

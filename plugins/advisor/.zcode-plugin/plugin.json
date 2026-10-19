@@ -1,0 +1,98 @@
+{
+  "name": "advisor",
+  "version": "0.2.14",
+  "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "uv",
+            "args": [
+              "run",
+              "--script",
+              "${ZCODE_PLUGIN_ROOT}/advisor.py",
+              "session-start"
+            ],
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "process",
+            "command": "uv",
+            "args": [
+              "run",
+              "--script",
+              "${ZCODE_PLUGIN_ROOT}/advisor.py",
+              "review-checkpoint",
+              "PreToolUse"
+            ],
+            "timeoutMs": 10000
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit|ApplyPatch|NotebookEdit"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "process",
+            "command": "uv",
+            "args": [
+              "run",
+              "--script",
+              "${ZCODE_PLUGIN_ROOT}/advisor.py",
+              "review-checkpoint",
+              "Stop"
+            ],
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "process",
+            "command": "uv",
+            "args": [
+              "run",
+              "--script",
+              "${ZCODE_PLUGIN_ROOT}/advisor.py",
+              "review-checkpoint",
+              "PostToolUse"
+            ],
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "process",
+            "command": "uv",
+            "args": [
+              "run",
+              "--script",
+              "${ZCODE_PLUGIN_ROOT}/advisor.py",
+              "review-checkpoint",
+              "PostToolUseFailure"
+            ],
+            "timeoutMs": 10000
+          }
+        ]
+      }
+    ]
+  }
+}

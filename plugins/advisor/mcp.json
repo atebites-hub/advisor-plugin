@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "advisor": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--script",
+        "${PLUGIN_ROOT}/advisor.py",
+        "serve"
+      ]
+    }
+  }
+}
