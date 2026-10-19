@@ -15,7 +15,13 @@ The destination must be absolute, new, and outside the checkout, with an existin
 
 Use the bundle only after the exporter succeeds. A failed write leaves partial output for inspection; choose a new destination rather than installing it. The exporter does not install a global plugin or delete output.
 
-Open that workspace in Antigravity Desktop, or run `agy --new-project` from its directory. Native runtime verified that both MCP and hook commands run from the plugin directory, so their `./advisor.py` paths remain relocatable. `uv` must be on the host's executable search path.
+Before opening the first session, resolve Python and dependencies:
+
+```sh
+uv run --script /absolute/path/to/workspace/.agents/plugins/advisor/advisor.py doctor
+```
+
+Then open that workspace in Antigravity Desktop, or run `agy --new-project` from its directory. Native runtime verified that both MCP and hook commands run from the plugin directory, so their `./advisor.py` paths remain relocatable. `uv` must be on the host's executable search path. A standalone cold-cache diagnostic passed, but the ten-second startup hook cannot guarantee dependency downloads on every network.
 
 ## Wait for readiness
 

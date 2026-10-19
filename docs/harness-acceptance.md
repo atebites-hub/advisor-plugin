@@ -15,12 +15,12 @@ Every advising call used **Codex CLI, `gpt-6.1-sol`, `max`**; the Claude advisin
 | Cursor CLI 2026.10.18-ea085cb, Grok 4.7 High/Fast | Production 0.3.3, explicit shared-file mode | Neutral task completed early/final original reads, used advice, and passed 13 tests. Existing shared skill discovery was part of the environment. |
 | Muse Code 1.4.9 | Native 0.3.3 export | Native TUI connected all three tools; working-model billing failure blocked consultation acceptance. |
 | ChatGPT/Codex local desktop thread | Production 0.3.3 | Actual native status, consultations, and original completed reads verified; separate neutral fixture and GUI onboarding not claimed. |
-| Claude Desktop 2.42304.2 | Public marketplace 0.3.3 | Marketplace discovery verified; local MCP trust and desktop task pending. |
+| Claude Desktop 2.42304.2, bundled Code 2.1.299, Opus 5.5 Low | Private local marketplace, 0.3.4 source `05b7117` | Neutral task retrieved three original reviews and finished with 19 independent tests passing. Skill loading and supplied-context limits remain. |
 | Antigravity Desktop 2.23.1, Gemini 3.8 Flash High | Revised 0.3.4 source/skill | Fresh neutral warm-session task completed original early/final reads, used advice, passed 11 tests, and made no edits after final submission. Cold-start and invalidation limits remain. |
 | Cursor Desktop 3.24.18, Grok 4.7 High/Fast | Production 0.3.3 | Neutral task completed early/final original reads, used advice, and passed 17 tests. Local skill and imported identical MCP provenance are qualified below. |
 | ZCode Desktop | Earlier versioned trials | See [ZCode evidence](zcode-smoke-test.md); no fresh 0.3.4 lifecycle claim. |
 
-The new Antigravity CLI and Claude startup implementations were tested before the metadata bump to 0.3.4. Antigravity Desktop’s fresh retest used the revised 0.3.4 source and 7,988-byte shared skill. Other rows retain their tested 0.3.3 package identity. The 0.3.4 source suite separately passes **304 tests on Python 3.11 and 3.12**, with resource warnings treated as errors; these tests simulate provider calls.
+The new Antigravity CLI and Claude startup implementations were tested before the metadata bump to 0.3.4. Antigravity Desktop’s fresh retest used the revised 0.3.4 source and 7,988-byte shared skill. Claude Desktop’s candidate trial used `05b7117`; production 0.3.3 trials retain their original package identity. The 0.3.4 source suite separately passes **304 tests on Python 3.11 and 3.12**, with resource warnings treated as errors; these tests simulate provider calls.
 
 ## Grok Build CLI
 
@@ -42,6 +42,16 @@ The shared skill now explicitly requires new checks and final consultation after
 
 This is a **warm-session pass**: a prior byte-equivalent MCP transport and cached schemas were already present before the prompt. Cold-start readiness is unverified. No post-submission edit occurred, so the new invalidation rule’s edge case was **not exercised**; the successful ordering does not prove future agents always follow it.
 
+## Directed freshness probes
+
+A separate Claude Code 2.1.301 / Opus 5.5 Low prompt explicitly staged a release-note edit after its first final-review response, without asking for another review. The 0.3.4 worker received startup instructions but did not load the full Skill or perform an early consultation. It read completed Codex advice, wrote `RELEASE_NOTES.md`, and finished without another consultation: **freshness failed**. The first advice was inspection-only because supplied code was pseudocode and tests had not run; this does not establish stale completion after fully approved source review. Restrictive headless discovery permissions also confounded its test execution. Independent Python 3.11 checks later passed 17 tests and 8,342 oracle cases; those results did not feed the native review.
+
+The explicit rule now appears in the global startup/MCP policy as well as the Skill: any deliverable edit since final submission, including tests, documentation, or suggested changes, requires fresh checks and another final consultation. It applies after limited advice too. This is an instruction clarification, not a new edit guard or automatic consultation.
+
+A fresh directed Desktop 2.42304.2 / bundled Code 2.1.299 task received the complete revised policy and loaded the Skill. Using normal native Auto permissions and the same staged prompt, it read early advice, saved its repair and tests, passed 18 tests, and read completion advice. It then wrote the release notes, reran the tests, explicitly recognized the freshness rule, and requested another final consultation without a reminder. It read that original completed result before finishing and made no later edits. Independent Python 3.11 checks passed all 18 tests and 8,342 oracle cases; original tests, README, and package hashes remained intact.
+
+This **passes directed renewal after qualified advice**. Review inputs remained condensed, including reformatted release-note contents rather than the literal saved file, so full source-level approval is not established. A fixture-local Python PATH setting was prepared, but the native run did not report its interpreter version; only the independent checks establish Python 3.11. The different native permission setup and Skill-loading behavior also prevent treating the two trials as a controlled measurement of the instruction change. This is evidence for one same-turn renewal, not neutral-trigger proof or guaranteed cross-host compliance.
+
 ## Claude Code
 
 The original 0.3.3 neutral Low-effort task repaired its fixture without consulting Advisor. The new native SessionStart registration delivered the complete checkpoint policy before the first tool. A fresh task then checked status, requested an early review, read the original completed advice before its first source write, and used native background-task completion notifications without a manually injected wake.
@@ -49,6 +59,14 @@ The original 0.3.3 neutral Low-effort task repaired its fixture without consulti
 The worker applied cancellation/retirement advice, saved and tested its repair, then requested completion review. That critique led to a cancelled-close regression and a corrected orphan-exception test. It verified mutation sensitivity and read a renewed original completion review before finishing. All ten tests passed independently; the original four test methods were preserved.
 
 One initial packet failed validation before creating a job; the corrected explicit packet started the consultation. Three successful jobs all used the same stable session/task and configured Codex profile. The worker received the startup policy but did not explicitly load the skill. Completion packets contained pseudocode and test summaries rather than source/diff; both advisor and worker disclosed limited source-level sign-off. Native mechanics passed; full-context review did not.
+
+## Claude Desktop
+
+After local MCP trust approval, a fresh **Code tab, This computer** task used Desktop 2.42304.2 and its bundled Claude Code 2.1.299, rather than the separately installed CLI. A private fixture-local marketplace loaded all fifteen public 0.3.4 files from `05b7117`; source/cache hashes and the running server path matched. The existing user-scoped plugin was disabled only for that fixture. Native plugin configuration also stored the distinct candidate's options in user `pluginConfigs`; installation scope does not imply every configuration byte stays project-local.
+
+The neutral prompt contained no Advisor or review cues. SessionStart delivered the policy before tools, and the worker read original early advice before edits. Its first completion packet supplied a scratch-file path; the advisor correctly declined implementation sign-off. Without controller coaching, the worker submitted another review and retrieved its original completed advice before finishing, with no later edits. All three native result strings matched their original saved results exactly.
+
+Independent Python 3.11 checks passed all 19 saved tests and 8,342 graph-oracle cases, preserving the original eight test methods and README. The worker itself tested only Python 3.9.6 and disclosed that limit. The replacement review packet still contained reformatted pseudocode and test summaries, rather than literal complete source/tests. The full Skill was listed but never explicitly loaded. This establishes native consultation mechanics and a correct fixture result, with incomplete review context; synchronous shell polling does not establish native completion notifications. Ordinary Claude Desktop chat and MCPB installation remain separate surfaces.
 
 ## Codex CLI
 
@@ -78,4 +96,8 @@ One working-model request to `muse-spark-1.3-contributor` failed before output w
 
 Outside ZCode, workers supply explicit packets. Include actual source/diffs, contracts, and test output; a summary-only packet can support mechanics testing while limiting review quality. These trials do not add automatic transcript capture or ZCode's named-edit holds to other hosts. Claude's native background notifications were observed; other tested workers polled or scheduled their own checks. A passing fixture does not guarantee every future agent follows the policy.
 
-Startup-hook checks used available Python/dependency caches. Cold-cache resolution within the ten-second hook timeout was not tested; run the documented `doctor` prerequisite before the first host session.
+## Cold-start diagnostics
+
+Separate standalone probes of 0.3.4 source `05b7117` used empty private managed-Python and dependency-cache directories, leaving normal caches unchanged. The Claude startup hook delivered valid instructions in **4.168 seconds** under a ten-second subprocess bound; a dependency-only cold sample took 1.765 seconds. A fresh `doctor` preparation took 4.084 seconds, followed by prepared Claude and Antigravity hooks in 0.135 and 0.087 seconds. The exact Antigravity relative command and plugin working directory also passed in 0.089 seconds.
+
+MCP initialization and discovery were measured separately: 5.064 seconds with another empty runtime/cache, and 1.250 seconds after preparation. Both exposed three tools without invoking any tool or model. uv selected managed CPython 3.15.0 and installed 29 locked packages; this does not establish the full test suite on Python 3.15. These single-network subprocess diagnostics do not prove native-host cold dispatch or guarantee resolution within ten seconds elsewhere. Run the documented `doctor` prerequisite before the first host session.
