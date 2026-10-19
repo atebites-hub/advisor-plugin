@@ -1,7 +1,6 @@
 """A native Muse export contains only relocatable runtime and skill files."""
 
 import contextlib
-import importlib.util
 import io
 import json
 import os
@@ -12,12 +11,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from scripts import export_muse as exporter
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/export_muse.py"
-SPEC = importlib.util.spec_from_file_location("advisor_muse_export", SCRIPT)
-exporter = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(exporter)
 
 FILES = (
     "advisor.py", "advisor.py.lock", "configuration.py", "session_context.py",

@@ -1188,10 +1188,14 @@ def main() -> int:
     parser.add_argument("command", choices=("serve", "consult", "configure", "doctor", "worker", "wait", "session-start", "review-checkpoint"))
     parser.add_argument("job_id", nargs="?")
     parser.add_argument("--config", type=Path, help="User configuration file (configure, doctor, or consult).")
+    parser.add_argument("--hook-format", choices=("claude", "antigravity"),
+                        help="Startup hook output format (session-start only; default: claude).")
     args = parser.parse_args()
     try:
         if args.config is not None and args.command not in {"configure", "doctor", "consult"}:
             raise AdvisorError("--config is supported only by configure, doctor, and consult.")
+        if args.hook_format is not None and args.command != "session-start":
+            raise AdvisorError("--hook-format is supported only by session-start.")
         if args.command == "configure":
             return configuration.configure(args.config)
         if args.command == "review-checkpoint":
@@ -1217,10 +1221,12 @@ def main() -> int:
             print(json.dumps(wait_for_advice(args.job_id)))
             return 0
         if args.command == "session-start":
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "SessionStart",
-                "additionalContext": "Advisor SessionStart instructions\n" + POLICY,
-            }}))
+            policy = "Advisor SessionStart instructions\n" + POLICY
+            if args.hook_format == "antigravity":
+                output = {"injectSteps": [{"systemMessage": {"systemMessage": policy}}]}
+            else:
+                output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": policy}}
+            print(json.dumps(output))
         elif args.command == "serve":
             build_server().run(transport="stdio")
         elif args.command == "doctor":
