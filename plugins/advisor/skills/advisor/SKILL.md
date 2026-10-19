@@ -5,7 +5,7 @@ description: Review plans before substantive work and saved, tested deliverables
 
 # Advisor
 
-After orientation, gather evidence and consult before substantive work. Defer dependent decisions/edits until advice arrives; continue independent work.
+Gather evidence and consult before substantive work. Defer dependent decisions/edits until advice arrives; continue independent work.
 
 Multistep tasks need early and final reviews. Save and test first. Any deliverable edit after submitting final review, including tests/docs or suggested edits, requires checks and a new final consultation. Read and evaluate completed advice before declaring done.
 
@@ -38,17 +38,18 @@ In **other hosts or the standalone CLI**, supply this packet; only ZCode capture
 | Field | Value |
 | --- | --- |
 | `provider` | `claude` or `codex` |
-| `workspace` | Absolute path to the current project |
-| `host` | Working environment, such as `cursor` or `zcode` |
-| `session_id` | Stable identifier for your current working session |
-| `task_id` | Stable identifier for this task; reuse it for follow-ups |
-| `stage` | `before_plan`, `after_plan`, `before_task`, or `during_task`; use `during_task` for completion reviews |
-| `question` | The plan, work, uncertainty, or behavior to review |
+| `workspace` | Absolute project directory |
+| `host` | Working environment, e.g. `cursor` |
+| `session_id` | Stable worker session ID |
+| `task_id` | Stable task ID; reuse for follow-ups |
+| `stage` | `before_plan`, `after_plan`, `before_task`; `during_task` for final reviews |
+| `question` | Focused review question |
 | `context` | Context packet as text |
+| `context_files` | Optional selected saved files, relative to the workspace |
 
-Include source/diffs, surrounding code, contracts, and test output for code reviews. The advisor cannot open files or run checks. Mark missing evidence or compacted history and limit the review.
+For code reviews, use `context_files` for saved source, tests, contracts and output: 1–32 workspace-relative regular UTF-8 files. Advisor freezes sanitized literal contents; symlinks are rejected and globs never expand. Do not use this option for native ZCode. Put history and approach in `context`; mark missing evidence. Advisors cannot open paths or run checks.
 
-Omit secrets and unrelated personal data. Native capture reads only the selected session, excludes protected reasoning and credential headers/values, and declares compaction and omitted image/video bytes. It cannot recover discarded history or unseen media. Manual input is limited to 1 MiB; assembled native packets to 8 MiB, without silent truncation. See `docs/context-transfer.md`.
+Omit secrets and unrelated personal data. Native capture reads only the selected session, excludes protected reasoning and credential headers/values, and declares compaction and omitted image/video bytes. It cannot recover discarded history or unseen media. Tool input is limited to 1 MiB; assembled packets to 8 MiB, without silent truncation. See `docs/context-transfer.md`.
 
 ## Use the advice
 
@@ -60,11 +61,11 @@ Without a native waiter, poll `read_advice` after `poll_after_seconds`, between 
 
 Native capture can return `unavailable` without a job or provider call. Report incomplete review; never substitute a manual summary, older snapshot, invented IDs, or another provider. Declared dependencies remain blocked.
 
-Advice may take many minutes. No total limit is implicit; `idle_timeout_seconds` defaults to 1200. Silent models may still be working. Explicit `timeout_seconds` stays absolute. Jobs freeze both profiles and settings; later configuration edits never alter them or prevent retrieval. Watchers follow terminal status. Progress is counts only; private reasoning is never persisted or returned.
+Advice can take minutes. `idle_timeout_seconds` defaults to 1200; silent work can still time out. No total deadline is implicit; explicit `timeout_seconds` stays absolute. Jobs freeze profiles/settings; later edits cannot alter them or block retrieval. Watchers follow terminal status. Progress contains counts, never private reasoning.
 
-Advice is private at `advice_path`; never commit it or copy it into version-controlled `docs/`. Results identify provider, requested model, effort, and budget.
+Advice stays private at `advice_path`; never commit it, including under `docs/`. Results identify provider, requested model, effort, and budget.
 
-Each workspace/session/task/provider/model/effort has a separate resumable conversation. Keep IDs stable for follow-ups; use new task IDs for unrelated work.
+Memory is separate for each workspace/session/task/provider/model/effort. Keep IDs stable for follow-ups; new tasks need new IDs.
 
 Check advice against repository/user instructions and verify changes. Resolve conflicts with direct evidence or focused follow-up. Ask the user about unknown preferences.
 

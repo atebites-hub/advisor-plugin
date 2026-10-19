@@ -29,7 +29,7 @@ if __name__ == "__main__":
     sys.dont_write_bytecode = True
 
 import configuration
-from session_context import ContextCaptureError, ContextUnavailableError, capture_zcode_context, load_context_snapshot, zcode_context_status
+from session_context import ContextCaptureError, ContextUnavailableError, capture_file_context, capture_zcode_context, load_context_snapshot, load_file_context, zcode_context_status
 from usage_limits import prepare_codex_usage, detect_usage
 from review_checkpoints import CheckpointError, attach_dependencies, begin_dependencies, normalize_dependent_paths, register_review, record_review, record_unavailable_review, review_checkpoint, verify_job_scope
 
@@ -70,7 +70,12 @@ POLICY = (
     "the current system instructions, available transcript, tool definitions, "
     "calls and results automatically; stage and a stable task_id may be supplied. "
     "Other hosts require workspace, host, stable session_id and task_id, stage, "
-    "question, and context. Verified incomplete native history returns unavailable with no "
+    "question, and context. In those hosts, attach saved source, tests, contracts, "
+    "and test output with context_files: 1-32 explicit workspace-relative UTF-8 files. "
+    "Advisor freezes their sanitized literal contents before starting the job; "
+    "paths and paraphrases in context are not file attachments. Do not use "
+    "context_files on ZCode's native capture route. "
+    "Verified incomplete native history returns unavailable with no "
     "job or provider call: report the review incomplete. Never replace failed "
     "native capture with a CLI/manual summary, older snapshot, invented IDs, "
     "or another provider. Full recording requires ZCode's app-wide "
@@ -222,7 +227,7 @@ def consultation_profiles(config: dict, provider: str) -> list:
     return [[name, profiles[name]["model"], profiles[name]["effort"]] for name in selected]
 
 
-def validate_request(request: dict) -> dict:
+def validate_request(request: dict, *, check_input_size: bool = True) -> dict:
     if not isinstance(request, dict):
         raise AdvisorError("Consultation request must be a JSON object.")
     fields = ("workspace", "host", "session_id", "task_id", "stage", "question", "context")
@@ -230,10 +235,13 @@ def validate_request(request: dict) -> dict:
         value = request.get(field)
         if not isinstance(value, str) or not value.strip() or "\x00" in value:
             raise AdvisorError(f"{field} must be a nonempty string.")
-    if len(json.dumps(request).encode()) > MAX_INPUT_BYTES:
+    if check_input_size and len(json.dumps(request).encode()) > MAX_INPUT_BYTES:
         raise AdvisorError("Context exceeds 1 MiB; supply a focused context packet.")
     if request["stage"] not in STAGES:
         raise AdvisorError("Unknown consultation stage.")
+    if ("context_files" in request and "file_context_id" in request
+            or "context_snapshot_id" in request and any(key in request for key in ("context_files", "file_context_id"))):
+        raise AdvisorError("Selected files cannot be combined with another context snapshot or reference.")
     workspace = Path(request["workspace"])
     if not workspace.is_absolute() or not workspace.is_dir():
         raise AdvisorError("workspace must be an absolute path to an existing directory.")
@@ -258,6 +266,8 @@ def prepare_request(request: dict, meta: dict, *, state_dir: Path | None = None,
     config = load_config() if _config is None else _config
     select_provider(request, config, explicit=True)
     if "com.zcode/request-context" in meta:
+        if any(key in request for key in ("context_files", "file_context_id")):
+            raise AdvisorError("Selected files are not supported on ZCode's native capture route.")
         if not isinstance(request.get("dependent_paths"), list):
             raise AdvisorError("Native ZCode consultations require explicit dependent_paths: concrete files/directories, or [] for read-only advice.")
         try:
@@ -273,12 +283,32 @@ def prepare_request(request: dict, meta: dict, *, state_dir: Path | None = None,
     return validate_request(request)
 
 
+def freeze_file_context(request: dict, state_dir: Path | None = None) -> dict:
+    if "context_files" not in request:
+        return request
+    try:
+        snapshot_id = capture_file_context(request, state_root(state_dir).resolve(), redact)
+    except ContextCaptureError as exc:
+        raise AdvisorError(str(exc)) from exc
+    return {**{key: value for key, value in request.items() if key != "context_files"},
+            "file_context_id": snapshot_id}
+
+
 def context_packet(request: dict, state_dir: Path | None = None) -> tuple[dict, dict]:
     packet = {key: request[key] for key in ("workspace", "host", "session_id", "task_id",
                                            "stage", "question", "context")}
     transfer = {"mode": "supplied_packet"}
     if "dependent_paths" in request:
         packet["dependent_paths"] = request["dependent_paths"]
+    if "file_context_id" in request:
+        try:
+            snapshot = load_file_context(request["file_context_id"], request, state_root(state_dir).resolve())
+        except ContextCaptureError as exc:
+            raise AdvisorError(str(exc)) from exc
+        packet["file_context"] = snapshot
+        transfer.update(file_context_id=request["file_context_id"],
+                        files=[{key: value for key, value in entry.items() if key != "content"}
+                               for entry in snapshot["files"]])
     if "context_snapshot_id" in request:
         try:
             snapshot = load_context_snapshot(request["context_snapshot_id"], request["workspace"],
@@ -682,13 +712,13 @@ def run_provider(provider: str, model: str, prompt: str, workspace: Path,
 
 def consult(request: dict, *, config_path: Path | None = None,
             state_dir: Path | None = None, progress_path: Path | None = None,
-            _config: dict | None = None) -> dict:
+            _config: dict | None = None, _input_validated: bool = False) -> dict:
     started = time.monotonic()
     if os.environ.get("ADVISOR_ACTIVE"):
         raise AdvisorError("Nested Advisor consultations are disabled to prevent recursion.")
     config = load_config(config_path) if _config is None else _config
     provider = select_provider(request, config)
-    request = validate_request(request)
+    request = freeze_file_context(validate_request(request, check_input_size=not _input_validated), state_dir)
     packet, transfer = context_packet(request, state_dir)
     timeout = config.get("timeout_seconds")
     deadline = started + timeout if timeout is not None else None
@@ -936,12 +966,14 @@ def submit_consultation(request: dict, *, config_path: Path | None = None,
         raise AdvisorError("Nested Advisor consultations are disabled to prevent recursion.")
     config = load_config(config_path) if _config is None else _config
     provider = select_provider(request, config, explicit=True)
-    request = validate_request(request)
+    request = freeze_file_context(validate_request(request), state_dir)
     assembled, transfer = context_packet(request, state_dir)
     packet = {key: request[key] for key in ("provider", "workspace", "host", "session_id", "task_id",
                                           "stage", "question", "context")}
     if "context_snapshot_id" in request:
         packet["context_snapshot_id"] = request["context_snapshot_id"]
+    if "file_context_id" in request:
+        packet["file_context_id"] = request["file_context_id"]
     if "dependent_paths" in request:
         packet["dependent_paths"] = request["dependent_paths"]
     serialized = json.dumps([2, packet, consultation_profiles(config, provider)], sort_keys=True, ensure_ascii=False)
@@ -1022,8 +1054,9 @@ def run_job(job_id: str, *, state_dir: Path | None = None) -> int:
             write_private(config_path, json.dumps(config))
         else:
             raise AdvisorError("Unsupported Advisor job timeout policy.")
+        # Submission checked the client cap before paths became a longer frozen reference.
         result = consult(payload["request"], config_path=config_path, state_dir=state_dir, _config=config,
-                         progress_path=directory / "progress.json")
+                         progress_path=directory / "progress.json", _input_validated=True)
         write_private(directory / "advice.md", result["advice"] + "\n")
         write_private(directory / "result.json", json.dumps({"status": "completed", **result}, ensure_ascii=False))
         return 0
@@ -1033,8 +1066,10 @@ def run_job(job_id: str, *, state_dir: Path | None = None) -> int:
 
 
 def build_server():
+    from typing import Annotated
     from mcp.server.fastmcp import Context, FastMCP
     from mcp.types import ToolAnnotations
+    from pydantic import Field
 
     server = FastMCP("advisor", instructions=POLICY)
 
@@ -1082,6 +1117,14 @@ def build_server():
         session_id (worker session), task_id (stable task), stage (before_plan,
         after_plan, before_task, during_task), question (review or uncertainty),
         and context (task, constraints, available history, evidence, attempts).
+        Use context_files for saved source, tests, contracts and test output:
+        1-32 explicitly named workspace-relative regular UTF-8 files, captured
+        and redacted by Advisor before the job starts. Symlinks and traversal
+        are rejected. Files stay frozen if originals later change. This is
+        selected-file evidence, not conversation capture or proof of test execution.
+        Do not combine it with ZCode native capture. Secure file capture is
+        unavailable on platforms without directory-descriptor/no-follow opens;
+        existing context-only requests remain supported.
         Sessions are isolated by worker/task/provider and resumed automatically.
         This sends context to the chosen CLI's service and consumes its quota.
         """
@@ -1131,6 +1174,13 @@ def build_server():
             raise AdvisorError(f"Advisor job {result['job_id']} was submitted, but its reminder could not be registered. Read that existing job; do not resubmit. {exc}") from exc
 
     # Keep the SDK lazy for the standalone CLI and instruction-only startup hook.
+    consult_advisor.__annotations__["request"] = Annotated[dict, Field(json_schema_extra={
+        "properties": {"context_files": {
+            "type": "array", "minItems": 1, "maxItems": 32, "uniqueItems": True,
+            "items": {"type": "string", "minLength": 1},
+            "description": "Optional explicit workspace-relative regular UTF-8 files to freeze as sanitized literal evidence; no symlinks, traversal, glob expansion, or ZCode native capture.",
+        }},
+    })]
     consult_advisor.__annotations__["ctx"] = Context
     server.add_tool(consult_advisor, annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
 

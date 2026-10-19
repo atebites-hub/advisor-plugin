@@ -103,7 +103,25 @@ For that unchanged final revision, `Stop` permits a truthful report that the rev
 
 ## Other hosts
 
-Generic MCP does not expose a host's system prompt or conversation. Other hosts and manual standalone CLI consultations still require an explicit `context` packet containing the relevant instructions, history, source/contracts, tool definitions/results, and test evidence. Their native transcript adapters are not implemented or claimed tested. Manual CLI support does not authorize an automatic fallback after native capture fails.
+Generic MCP does not expose a host's system prompt or conversation. Other hosts and manual standalone CLI consultations require explicit `context` for relevant instructions, history, tool definitions/results and attempts. Saved source, contracts and test evidence can use selected-file attachments below. Their native transcript adapters are not implemented or claimed tested. Manual CLI support does not authorize an automatic fallback after native capture fails.
+
+## Selected files outside ZCode
+
+Version 0.3.5 adds optional `context_files` to the existing consultation request. Keep `context` for the objective, history, approach, constraints and test command; select saved evidence explicitly:
+
+```json
+{"context_files": ["src/retry.py", "tests/test_retry.py", "README.md", "test-output.txt"]}
+```
+
+The list must contain 1–32 distinct workspace-relative regular UTF-8 files without NUL bytes. Paths are literal: no traversal, absolute paths, symlink components, glob expansion, directories or recursive discovery. Secure directory-descriptor/no-follow opens are required; the option fails closed on unsupported platforms, while existing context-only requests remain available. Files are decoded from bytes without newline conversion, preserving Unicode and CRLF. Common secrets are redacted before persistence or transmission; this is sanitized literal evidence, not a promise of untouched source or complete secret detection. Select only appropriate files.
+
+Advisor finishes capture before returning the background job. A deterministic, scope-bound snapshot is saved privately under `~/.local/state/advisor/file-contexts/`; the worker receives its content-hash reference and never reopens the selected originals. Editing or deleting originals afterward cannot alter that job's evidence. Changed sanitized contents produce another snapshot and job identity. Snapshot version, hash and workspace/host/session/task binding are checked before provider launch. Stored files use private permissions. Failed integrity or scope checks stop the consultation.
+
+Raw reads are limited to 8 MiB in aggregate, and the complete serialized provider packet independently remains limited to 8 MiB, including context and JSON escaping. The original tool request stays limited to 1 MiB. Oversized input fails without truncation. Detectable changes during an individual read fail; the snapshot is not an atomic checkout of several files.
+
+`context_transfer` remains `supplied_packet`, with `file_context_id` and a selected-file manifest showing relative paths, sanitized-content hashes, byte counts and redaction flags. Actual captured contents are included in the provider packet. This does not transfer unselected files, instructions, conversation or tool schemas, authenticate file authorship, or prove that a saved test-output file records a real/current test run. Keep providing relevant history and run the checks yourself.
+
+This option cannot be combined with `context_snapshot_id` or used on ZCode's native-capture route. Native failures never fall back to selected files. ZCode retains its existing exact-invocation capture and checkpoint contract.
 
 ## Runtime and verification
 
