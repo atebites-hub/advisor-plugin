@@ -87,9 +87,14 @@ class NativeContextMCPTests(unittest.IsolatedAsyncioTestCase):
                     print(json.dumps(event))
                 '''))
             fake.chmod(0o700)
+            (root / "config.json").write_text("{}")
             environment = {**os.environ, "HOME": str(root), "PATH": str(root),
-                           "ADVISOR_TEST_ROOT": str(root), "ADVISOR_CONFIG": str(root / "absent.json"),
-                           "ADVISOR_STATE_DIR": str(root / "state")}
+                           "ADVISOR_TEST_ROOT": str(root), "ADVISOR_CONFIG": str(root / "config.json"),
+                           "ADVISOR_STATE_DIR": str(root / "state"),
+                           "ADVISOR_USE_APP_SETTINGS": "true",
+                           "ADVISOR_CLAUDE_ENABLED": "false", "ADVISOR_CLAUDE_MODEL": "claude-opus-5-5",
+                           "ADVISOR_CLAUDE_EFFORT": "max", "ADVISOR_CODEX_ENABLED": "true",
+                           "ADVISOR_CODEX_MODEL": "gpt-6-astra", "ADVISOR_CODEX_EFFORT": "high"}
             for key in ("ADVISOR_ACTIVE", "ZCODE_SESSION_DB_PATH", "ZCODE_SESSION_DB"):
                 environment.pop(key, None)
             params = StdioServerParameters(command=sys.executable, args=[str(RUNTIME), "serve"], env=environment)
@@ -123,6 +128,9 @@ class NativeContextMCPTests(unittest.IsolatedAsyncioTestCase):
                         del status_entry["request"]["body"]["messages"]
                         source.write_text(json.dumps(status_entry) + "\n")
                         status = tool_result(await session.call_tool("advisor_status", {}, meta=meta))
+                        self.assertFalse(status["advisors"]["claude"]["enabled"])
+                        self.assertEqual(status["advisors"]["codex"]["model"], "gpt-6-astra")
+                        self.assertEqual(status["advisors"]["codex"]["effort"], "high")
                         self.assertEqual(status["native_context"]["recording_mode"], "bounded")
                         self.assertFalse(status["native_context"]["long_session_ready"])
                         source.write_text(json.dumps(entry) + "\n")
@@ -197,6 +205,7 @@ class NativeContextMCPTests(unittest.IsolatedAsyncioTestCase):
                         result = await completed_advice(session, job)
                         self.assertEqual(result["context_transfer"]["snapshot_id"], snapshot_id)
                         self.assertEqual(result["advice"], "Review complete")
+                        self.assertEqual((result["model"], result["effort"]), ("gpt-6-astra", "high"))
                         ready, errors = await asyncio.wait_for(waiter.communicate(), 7)
                         self.assertEqual(waiter.returncode, 0, errors)
                         self.assertEqual(json.loads(ready)["status"], "completed")

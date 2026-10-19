@@ -15,6 +15,8 @@ import stat
 import time
 import uuid
 
+from configuration import EFFORTS
+
 
 MAX_SCAN_BYTES = 64 * 1024 * 1024
 MAX_RECORD_BYTES = 32 * 1024 * 1024
@@ -24,6 +26,8 @@ MAX_DIRECTORY_ENTRIES = 4096
 VERIFY_SECONDS = 2.0
 BOUNDARY_BYTES = 4096
 MODELS = {"claude": "claude-opus-5-5", "codex": "gpt-6.1-sol"}
+_MODEL_SELECTOR = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+_CLAUDE_MODEL = re.compile(r"claude-[a-z0-9][a-z0-9.-]*")
 _NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
 _STRING_END = re.compile(r'["\\\x00-\x1f]')
 _TIME = r"(?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM)"
@@ -434,7 +438,7 @@ def _codex_terminal(stdout, budget):
     return thread, terminal
 
 
-def _codex(stdout, run, started, finished, budget):
+def _codex(stdout, run, started, finished, budget, model, effort):
     thread, message = _codex_terminal(stdout, budget)
     if (not isinstance(run, dict) or type(run.get("version")) is not int or run["version"] != 1
             or run.get("session_id") not in (None, thread)):
@@ -506,8 +510,8 @@ def _codex(stdout, run, started, finished, budget):
         turn = beginning.get("turn_id")
         if not turn or context.get("turn_id") != turn or terminal.get("turn_id") != turn:
             raise _Unknown
-        if (context.get("cwd") != run["cwd"] or context.get("model") != MODELS["codex"]
-                or context.get("effort") != "max"):
+        if (context.get("cwd") != run["cwd"] or context.get("model") != model
+                or context.get("effort") != effort):
             raise _Unknown
         start_time, end_time = beginning.get("started_at"), terminal.get("completed_at")
         if (type(start_time) is not int or type(end_time) is not int
@@ -553,24 +557,28 @@ def _claude(stdout, budget):
             "message": "Claude reported its first-party usage limit was reached."}
 
 
-def detect_usage(provider: str, stdout: str, returncode: int, *, model: str,
+def detect_usage(provider: str, stdout: str, returncode: int, *, model: str, effort: str = "max",
                  codex_run: dict | None = None, started_at: float | None = None,
                  finished_at: float | None = None, deadline: float | None = None) -> dict | None:
-    """Return bounded typed evidence only after an ordinarily exited failed CLI."""
+    """Verify terminal usage evidence against the caller's trusted profile."""
     try:
         # Windows crash statuses can be positive; its normal-exit proof is unsupported.
         if os.name != "posix":
             return None
         budget = _Budget(deadline)
-        if (not isinstance(provider, str) or provider not in MODELS or MODELS[provider] != model
+        if (not isinstance(provider, str) or provider not in MODELS
+                or not isinstance(model, str) or _MODEL_SELECTOR.fullmatch(model) is None
+                or not isinstance(effort, str) or effort not in EFFORTS
                 or type(returncode) is not int or not 0 <= returncode <= 255
                 or not isinstance(stdout, str)):
             return None
         if provider == "claude":
+            if _CLAUDE_MODEL.fullmatch(model) is None:
+                return None
             return _claude(stdout, budget)
         if (type(started_at) not in (int, float) or type(finished_at) not in (int, float)
                 or not math.isfinite(started_at) or not math.isfinite(finished_at) or finished_at < started_at):
             return None
-        return _codex(stdout, codex_run, started_at, finished_at, budget)
+        return _codex(stdout, codex_run, started_at, finished_at, budget, model, effort)
     except (OSError, ValueError, TypeError, KeyError, IndexError, OverflowError, RecursionError, _Unknown):
         return None

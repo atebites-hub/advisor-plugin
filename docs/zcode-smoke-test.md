@@ -1,5 +1,21 @@
 # ZCode smoke test
 
+## 0.3.1 configurable advisors (October 19, 2026)
+
+ZCode Desktop **3.16.1** (bundled CLI **0.17.0**) displayed all seven native Advisor configuration controls. Saving Claude disabled and Codex `gpt-6-astra` / `max` reached the real MCP `advisor_status` in a fresh session without restarting the app. Status also verified `full_retention`. The shared JSON configuration and guided CLI setup were checked separately.
+
+A fresh **directed configuration test** used GLM-5.3-Flash with Max requested to repair a small Python function. The prompt required the installed review workflow but did not name a provider or model. The worker discovered the enabled profiles, selected Codex, loaded the skill, and completed two uncached Astra Max reviews in the same advising session. The calls took **97.4 and 133.5 seconds**; native Codex `turn_context` metadata recorded `gpt-6-astra` and `max`.
+
+The worker launched each returned background watcher, retrieved both original results with native `read_advice`, and evaluated them. It waited for early advice before the dependent write, incorporated an implementation correction, saved the result, passed all **six unchanged fixture tests**, and submitted the final review after the last edit. The final critique led to stronger assertion-based verification before the worker finished. Independent grading passed the original tests plus structural-input and iterator-exception identity probes. Both native receipts completed, the final submission was newer than the last edit, and no jobs remained unread.
+
+A preceding **neutral** prompt for the same small task skipped Advisor; that attempt was stopped before its proposed edit. This trial therefore establishes directed configuration and advice use, not dependable unprompted triggering or benchmark improvement.
+
+All **269 automated tests passed on Python 3.11 and 3.12** with ResourceWarnings treated as errors; model calls in those tests are simulated. Lock, whitespace, and official manifest checks passed. Regressions cover configured alternate handoff, disabled providers, GUI precedence, frozen jobs, model/effort isolation, and legacy missing-versus-invalid configuration. The final code review found no blocking defect; the CLI wizard's single-writer assumption is documented.
+
+The full lifecycle above ran installed **0.3.0**. The final **0.3.1** adds the legacy migration repair and shares the effort constant; its profile-selection and schema-2 behavior are unchanged. The official updater installed 0.3.1, all **fourteen packaged files matched source**, and the native UI showed 0.3.1 with restored default profiles. The exact prior Advisor option entry was restored; approved complete model-I/O recording stayed enabled. Existing sessions may retain older MCP processes, so start a fresh session after an update. Other hosts' native settings adapters and every model/account combination remain untested. Requested identity is not an independent served-model attestation. Private sessions and original advice remain outside the repository.
+
+## Earlier checks
+
 Tested locally on October 15–18, 2026, using ZCode **3.15.3.8237**, working models **GLM-5.3 / GLM-5.3-Flash (Max requested)**, Advisor **0.1.1–0.2.14**, Claude Code **2.1.301**, and Codex CLI **0.162.1**. Version 0.2.12 separately verified controlled quota handoff and a fresh natural Codex advice lifecycle. Earlier versioned failures and directed checks remain recorded below. Both advising CLIs were already signed in. No credentials were copied.
 
 ## 0.2.14 Claude hidden-thinking progress

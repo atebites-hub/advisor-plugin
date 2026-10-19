@@ -2,18 +2,20 @@
 
 Set `"usage_fallback": true` in `~/.config/advisor/config.json` to authorize one alternate advisor after verified account usage exhaustion. It defaults to false and accepts only a JSON boolean. `advisor_status.usage_fallback.enabled` reports the current setting. Enabling this can send the same frozen context to both services sequentially and consume both accounts' allowances.
 
-The working agent chooses the primary. Claude Opus 5.5 Max can hand off to GPT 6.1 Sol Max, or vice versa. Advisor preserves the original job, snapshot, question, dependency hold, and watcher. It uses each provider's separate native conversation and successful-consult budget. An explicit total deadline covers both attempts, including verification; the alternate gets no fresh total allowance. Idle tracking starts anew for each provider.
+The working agent checks `advisor_status` and chooses one enabled primary. Handoff can use only the other enabled, user-configured provider profile. Defaults remain Claude Opus 5.5 Max and GPT 6.1 Sol Max; changing the Codex profile to `gpt-6-astra` with `max` makes that the Codex attempt. Requests cannot override model or effort, and a disabled alternate is never launched. See [profile configuration](../README.md#configure-advisors).
+
+Advisor preserves the original job, snapshot, question, dependency hold, and watcher. It uses each provider's separate native conversation and successful-consult budget. An explicit total deadline covers both attempts, including verification; the alternate gets no fresh total allowance. Idle tracking starts anew for each provider.
 
 `provider_attempts` records the bounded, redacted exhaustion cause before the alternate starts. Pending, failed, interrupted, and completed reads retain it. Completed results identify `requested_provider` and the actual answering `provider`. A journal-write failure prevents further launches. Both exhausted, or any alternate failure, leaves the review incomplete. Only retrieving the original job's completed advice can release its declared paths; the worker must also evaluate and verify it.
 
-Settings freeze at submission. Changing them cannot restart or alter an existing job. Unsnapshotted legacy jobs keep handoff disabled. Failed jobs are never automatically relaunched.
+Both profiles and handoff permission freeze at submission. Changing or disabling them cannot restart or alter an existing job; existing advice remains readable. Model or effort changes use separate consultation memory. Unsnapshotted legacy jobs keep handoff disabled. Failed jobs are never automatically relaunched.
 
 ## What counts as exhaustion
 
 Only a normally terminated, fully captured POSIX invocation can qualify. Windows handoff detection is unsupported because its abnormal exits can have positive status codes; ordinary consultations still work without automatic switching:
 
 - **Claude:** a unique final result with `is_error: true`, `api_error: "usage_limit_reached"`, and `api_error_origin: "first_party"`. A generic HTTP 429, warning event, assistant text, or unknown origin is insufficient. The result subtype alone is not proof: Claude can emit subtype `success` for an error result.
-- **Codex:** `exec --json` omits the typed error code. Its failed-turn message must match a known consumed-usage template **and** its own fresh terminal rollout metadata must report `usage_limit_exceeded`. The proof binds thread, turn, private invocation directory, fixed model, Max effort, timestamps, and terminal message. Text alone cannot qualify because another error can use arbitrary wording.
+- **Codex:** `exec --json` omits the typed error code. Its failed-turn message must match a known consumed-usage template **and** its own fresh terminal rollout metadata must report `usage_limit_exceeded`. The proof binds thread, turn, private invocation directory, the job's frozen model and effort, timestamps, and terminal message. A model or effort mismatch cannot qualify. Text alone cannot qualify because another error can use arbitrary wording.
 
 Timeouts, process signals, cleanup failures, authentication, capacity/transient rate limits, ambiguous errors, context failures, model entitlement, and Advisor's local consultation budget never switch providers. Missing, changed, torn, conflicting, or oversized evidence means unknown and no switch. An underlying CLI can still perform its own retries.
 

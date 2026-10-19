@@ -62,10 +62,11 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                     print(json.dumps(event))
                 '''))
             fake_codex.chmod(0o755)
+            (root / "config.json").write_text("{}")
             environment = {
                 **os.environ,
                 "PATH": str(bin_dir),
-                "ADVISOR_CONFIG": str(root / "absent-config.json"),
+                "ADVISOR_CONFIG": str(root / "config.json"),
                 "ADVISOR_STATE_DIR": str(root / "state"),
                 "ADVISOR_TEST_LOG": str(log),
             }
@@ -171,9 +172,10 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                     print(json.dumps(event))
                 '''))
             fake_codex.chmod(0o755)
+            (root / "config.json").write_text("{}")
             environment = {**os.environ, "PATH": str(root), "ADVISOR_TEST_ROOT": str(root),
                            "ADVISOR_STATE_DIR": str(root / "state"),
-                           "ADVISOR_CONFIG": str(root / "absent.json")}
+                           "ADVISOR_CONFIG": str(root / "config.json")}
             environment.pop("ADVISOR_ACTIVE", None)
             params = StdioServerParameters(command=sys.executable, args=[str(RUNTIME), "serve"], env=environment)
             request = {"provider": "codex", "workspace": str(root), "host": "zcode",

@@ -803,12 +803,14 @@ class ConsultTests(unittest.TestCase):
         provider.assert_not_called()
 
     @patch.object(advisor, "run_provider", return_value=("Advice", "native-1"))
-    def test_request_selects_one_fixed_profile_without_configuration(self, provider):
+    def test_request_selects_default_profile_without_configuration(self, provider):
         self.config.unlink()
         profiles = {"claude": "claude-opus-5-5", "codex": "gpt-6.1-sol"}
         for name, model in profiles.items():
             with self.subTest(provider=name):
-                result = self.consult(provider=name)
+                with patch.object(advisor.configuration, "config_path", return_value=self.config), patch.dict(os.environ):
+                    os.environ.pop("ADVISOR_CONFIG", None)
+                    result = advisor.consult(self.request | {"provider": name}, state_dir=self.state)
                 self.assertEqual(result["provider"], name)
                 self.assertEqual(result["model"], model)
                 self.assertEqual(provider.call_args.args[:2], (name, model))
@@ -869,7 +871,9 @@ class JobTests(unittest.TestCase):
         self.launch.return_value.pid = os.getpid()
         self.launch.return_value.poll.return_value = None
         self.addCleanup(advisor.WORKERS.clear)
-        environment = patch.dict(os.environ, {"ADVISOR_CONFIG": str(self.root / "absent.json")})
+        config = self.root / "config.json"
+        config.write_text("{}")
+        environment = patch.dict(os.environ, {"ADVISOR_CONFIG": str(config)})
         environment.start()
         self.addCleanup(environment.stop)
         os.environ.pop("ADVISOR_ACTIVE", None)
@@ -1020,6 +1024,38 @@ class JobTests(unittest.TestCase):
         with patch.object(advisor, "run_provider", return_value=("Advice", "native-1")) as provider:
             self.assertEqual(advisor.run_job(job["job_id"], state_dir=self.state), 0)
         self.assertEqual(provider.call_args.args[5], 1200)
+
+    def test_legacy_worker_uses_historic_defaults_when_environment_config_is_missing(self):
+        job = self.submit()
+        directory = Path(job["advice_path"]).parent
+        metadata = json.loads((directory / "job.json").read_text())
+        metadata.pop("timeout_policy_version")
+        metadata["deadline"] = time.time() + 1230
+        advisor.write_private(directory / "job.json", json.dumps(metadata))
+        advisor.write_private(directory / "request.json", json.dumps({"request": self.request, "config_path": None}))
+        os.environ["ADVISOR_CONFIG"] = str(self.root / "removed-config.json")
+        with patch.object(advisor, "run_provider", return_value=("Advice", "native-1")) as provider:
+            self.assertEqual(advisor.run_job(job["job_id"], state_dir=self.state), 0)
+        self.assertEqual(provider.call_args.args[1], "gpt-6.1-sol")
+        self.assertEqual(provider.call_args.args[5], 1200)
+        self.assertEqual(provider.call_args.kwargs["effort"], "max")
+        self.assertFalse(provider.call_args.kwargs["usage_fallback"])
+
+    def test_legacy_worker_rejects_existing_invalid_environment_config(self):
+        job = self.submit()
+        directory = Path(job["advice_path"]).parent
+        metadata = json.loads((directory / "job.json").read_text())
+        metadata.pop("timeout_policy_version")
+        metadata["deadline"] = time.time() + 1230
+        advisor.write_private(directory / "job.json", json.dumps(metadata))
+        advisor.write_private(directory / "request.json", json.dumps({"request": self.request, "config_path": None}))
+        invalid = self.root / "invalid-config.json"
+        invalid.write_text("{invalid JSON")
+        os.environ["ADVISOR_CONFIG"] = str(invalid)
+        with patch.object(advisor, "run_provider") as provider:
+            self.assertEqual(advisor.run_job(job["job_id"], state_dir=self.state), 1)
+        provider.assert_not_called()
+        self.assertIn("configuration as JSON", advisor.read_advice(job["job_id"], state_dir=self.state)["error"])
 
     def test_missing_frozen_configuration_fails_before_provider_launch(self):
         job = self.submit()

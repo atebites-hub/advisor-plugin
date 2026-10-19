@@ -8,13 +8,15 @@ The native `.zcode-plugin/plugin.json` declares a `SessionStart` hook. It runs `
 
 Verify Advisor's entries under **Settings → Hooks**, then ask a fresh agent to describe the consultation rule already in its context. See [ZCode's hook contract](https://zcode.z.ai/en/docs/hooks).
 
-Native consultation captures the current session using MCP metadata. From 0.2.10, every new consultation requires `advisor_status.native_context.recording_mode: "full_retention"`, rechecked against the consultation's own record. Enable **General → Keep complete model I/O** with user approval unless already authorized, and leave approved recording enabled. This creates app-wide unbounded logs including native reasoning; Advisor does not write global settings. Then choose one provider, declare `dependent_paths`, and ask the question. See the [context-transfer contract](context-transfer.md).
+Call `advisor_status` at session start and choose only an enabled provider with its reported user-configured model and effort. Requests cannot override those values. Configure them in **Settings → Plugins → Advisor → More details → Configuration**. `use_app_settings` defaults to true and overrides shared-file profiles; turning it off uses `~/.config/advisor/config.json` and defaults. The shared CLI wizard is `uv run --script plugins/advisor/advisor.py configure`; `ADVISOR_CONFIG` selects another file. Save and use a fresh session if the running MCP process retains old app values. See [configuration details](../README.md#configure-advisors).
+
+Native consultation captures the current session using MCP metadata. From 0.2.10, every new consultation requires `advisor_status.native_context.recording_mode: "full_retention"`, rechecked against the consultation's own record. Enable **General → Keep complete model I/O** with user approval unless already authorized, and leave approved recording enabled. This creates app-wide unbounded logs including native reasoning; Advisor does not write global settings. Then choose one enabled provider, declare `dependent_paths`, and ask the question. See the [context-transfer contract](context-transfer.md).
 
 A bounded/unknown readiness error creates no snapshot, job, or dependency hold: enable recording and make a new full request. Status and existing `read_advice` remain usable. Genuinely missing native history still returns `unavailable` with scoped dependency holds; never substitute a manual packet or provider fallback. Standalone CLI 0.16.9 lacks a supported full-retention setting and cannot start new native consultations in this release.
 
 ## Consultation timeouts
 
-New jobs freeze their timeout settings. By default there is no total deadline; `idle_timeout_seconds` limits silence in observable progress to 1200 seconds. A silent model may still be working. Explicit `timeout_seconds` stays absolute, and existing numeric job deadlines remain binding. Watchers follow original terminal status without a separate duration limit.
+New jobs freeze their provider profiles, handoff permission, and timeout settings. Changing or disabling profiles does not alter existing jobs or prevent their retrieval. By default there is no total deadline; `idle_timeout_seconds` limits silence in observable progress to 1200 seconds. A silent model may still be working. Explicit `timeout_seconds` stays absolute, and existing numeric job deadlines remain binding. Watchers follow original terminal status without a separate duration limit.
 
 ## ZCode asynchronous checkpoints, 0.2.10
 
@@ -51,8 +53,10 @@ require an early review and a final review after saving the deliverable and
 running tests, before claiming completion. Also consult for recurring errors,
 approach changes, or consequential technical uncertainty. Trivial reactive
 tasks do not need repeated reviews.
-Choose one advisor per consultation: `claude` (Opus 5.5 Max) or `codex`
-(GPT 6.1 Sol Max). User-supplied workflow preferences favor Claude for
+Call `advisor_status` at session start. Choose exactly one enabled `claude` or
+`codex` using its reported model and effort; do not override user settings.
+If both are disabled, make no new calls and report required reviews incomplete.
+User-supplied workflow preferences favor Claude for
 frontend, design, UX, planning, delegation, and orchestration; Codex for
 engineering, backend, architecture, mathematics, implementation, testing,
 and optimization. These are soft preferences, not benchmarked rankings.
@@ -85,4 +89,4 @@ A file inside an installed plugin is not automatically a project's instruction f
 
 ## Verified usage handoff
 
-With user-enabled `usage_fallback`, verified account exhaustion permits one alternate fixed Max advisor inside the original job. Keep its watcher and dependency hold; retrieve and evaluate that job's completed advice. `provider_attempts` records the exhausted primary and actual answer provider. The frozen context and explicit total deadline are shared. Timeouts, sign-in failures, unknown quota, local budgets, and native capture failures never switch. Both exhausted means incomplete review. See [evidence and privacy limits](usage-fallback.md).
+With user-enabled `usage_fallback`, verified account exhaustion permits the other enabled, configured advisor once inside the original job. A disabled alternate is never launched. Keep the same watcher and dependency hold; retrieve and evaluate that job's completed advice. `provider_attempts` records requested models/efforts, the exhausted primary, and actual answer provider. The frozen context and explicit total deadline are shared. Timeouts, sign-in failures, unknown quota, local budgets, and native capture failures never switch. Both exhausted means incomplete review. See [evidence and privacy limits](usage-fallback.md).
