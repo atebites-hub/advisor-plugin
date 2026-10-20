@@ -1,4 +1,4 @@
-"""Capture a host-bound ZCode model-input snapshot without changing host data."""
+"""Capture scoped native model input and selected workspace files without changing sources."""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ from typing import Callable
 
 MAX_CONTEXT_BYTES = 8 * 1024 * 1024
 MAX_SOURCE_BYTES = 64 * 1024 * 1024
+MAX_CONTEXT_FILES = 32
+MAX_FILE_SOURCE_BYTES = 8 * 1024 * 1024
+MAX_FILE_CONTEXT_BYTES = 8 * 1024 * 1024
 _SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}")
 _HIDDEN_FIELDS = {"reasoning", "reasoningtext", "reasoningcontent", "thinking", "signature", "encryptedcontent", "providermetadata"}
 _HIDDEN_TYPES = {"reasoning", "thinking", "redacted_thinking", "reasoning_content"}
@@ -415,3 +418,243 @@ def load_context_snapshot(snapshot_id: str, workspace: Path | str, host: str,
         raise
     except (OSError, ValueError, TypeError, AttributeError, RecursionError) as exc:
         raise ContextCaptureError("The private context snapshot is unavailable.") from exc
+
+
+def _file_binding(request: dict) -> dict:
+    if not isinstance(request, dict):
+        raise ContextCaptureError("File context requires a scoped request.")
+    keys = ("workspace", "host", "session_id", "task_id")
+    if any(not isinstance(request.get(key), str) or not request[key].strip()
+           or "\0" in request[key] for key in keys):
+        raise ContextCaptureError("File context requires workspace, host, session and task identities.")
+    workspace = Path(request["workspace"])
+    if not workspace.is_absolute() or ".." in workspace.parts:
+        raise ContextCaptureError("File context requires an absolute workspace.")
+    return {"workspace": str(workspace.resolve(strict=True)),
+            **{key: request[key] for key in keys[1:]}}
+
+
+def _selected_paths(value: object) -> list[str]:
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_CONTEXT_FILES:
+        raise ContextCaptureError(f"Select between 1 and {MAX_CONTEXT_FILES} context files.")
+    for path in value:
+        if (not isinstance(path, str) or "\0" in path or "\\" in path
+                or any(part in {"", ".", ".."} for part in path.split("/"))):
+            raise ContextCaptureError("Context files must be explicit workspace-relative file paths.")
+    if len(set(value)) != len(value):
+        raise ContextCaptureError("Context files must not contain duplicate paths.")
+    return sorted(value)
+
+
+def _secure_file_primitives() -> None:
+    if (not all(hasattr(os, name) for name in
+                ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK", "fchmod", "getuid"))
+            or any(function not in os.supports_dir_fd
+                   for function in (os.open, os.mkdir, os.stat, os.link, os.unlink))
+            or any(function not in os.supports_follow_symlinks for function in (os.stat, os.link))):
+        raise ContextCaptureError("Secure selected-file snapshots are unsupported on this platform.")
+
+
+def _file_directory(path: Path, *, create: bool = False) -> int:
+    if not path.is_absolute() or ".." in path.parts:
+        raise ContextCaptureError("File context directories must be absolute paths.")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    descriptor = os.open(path.anchor, flags)
+    try:
+        for name in path.parts[1:]:
+            if create:
+                try:
+                    os.mkdir(name, 0o700, dir_fd=descriptor)
+                except FileExistsError:
+                    pass
+            child = os.open(name, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _file_storage(state_dir: Path, *, create: bool) -> int:
+    root = _file_directory(Path(state_dir), create=create)
+    try:
+        if create:
+            try:
+                os.mkdir("file-contexts", 0o700, dir_fd=root)
+            except FileExistsError:
+                pass
+        descriptor = os.open("file-contexts", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                             dir_fd=root)
+    finally:
+        os.close(root)
+    try:
+        info = os.fstat(descriptor)
+        if info.st_uid != os.getuid():
+            raise ContextCaptureError("File context storage must belong to the current user.")
+        if create:
+            os.fchmod(descriptor, 0o700)
+        elif stat.S_IMODE(info.st_mode) & 0o077:
+            raise ContextCaptureError("File context storage must be private.")
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _file_identity(info: os.stat_result) -> tuple:
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _stable_file(directory: int, name: str, limit: int, *, private: bool = False) -> bytes:
+    descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise ContextCaptureError("Context sources must be regular files.")
+        if private and (before.st_uid != os.getuid() or stat.S_IMODE(before.st_mode) & 0o077):
+            raise ContextCaptureError("File context snapshots must be private.")
+        if before.st_size > limit:
+            raise ContextCaptureError("File context exceeds its size limit; nothing was truncated.")
+        chunks = []
+        size = 0
+        while True:
+            chunk = os.read(descriptor, min(65536, limit + 1 - size))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+            if size > limit:
+                raise ContextCaptureError("File context exceeds its size limit; nothing was truncated.")
+        after = os.fstat(descriptor)
+        current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        if (size != before.st_size or _file_identity(before) != _file_identity(after)
+                or _file_identity(before) != _file_identity(current)):
+            raise ContextCaptureError("A context file changed while it was being captured.")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def _selected_file(workspace: int, path: str, limit: int) -> bytes:
+    directories = [os.dup(workspace)]
+    try:
+        parts = path.split("/")
+        for name in parts[:-1]:
+            directories.append(os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=directories[-1]))
+        raw = _stable_file(directories[-1], parts[-1], limit)
+        for index, name in enumerate(parts[:-1]):
+            current = os.stat(name, dir_fd=directories[index], follow_symlinks=False)
+            opened = os.fstat(directories[index + 1])
+            if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                raise ContextCaptureError("A context file directory changed during capture.")
+        return raw
+    finally:
+        for descriptor in directories:
+            os.close(descriptor)
+
+
+def capture_file_context(request: dict, state_dir: Path, redact: Callable[[str], str]) -> str:
+    """Freeze selected UTF-8 files, rejecting NUL text and detectable changes during each read."""
+    try:
+        _secure_file_primitives()
+        binding = _file_binding(request)
+        paths = _selected_paths(request.get("context_files"))
+        workspace = _file_directory(Path(request["workspace"]))
+        files = []
+        remaining = MAX_FILE_SOURCE_BYTES
+        try:
+            for path in paths:
+                raw = _selected_file(workspace, path, remaining)
+                remaining -= len(raw)
+                text = raw.decode("utf-8")
+                if "\0" in text:
+                    raise ContextCaptureError("Context files must be UTF-8 text without NUL bytes.")
+                content = redact(text)
+                if not isinstance(content, str) or "\0" in content:
+                    raise ContextCaptureError("File context redaction must return UTF-8 text without NUL bytes.")
+                encoded = content.encode("utf-8")
+                files.append({"path": path, "content": content, "sha256": hashlib.sha256(encoded).hexdigest(),
+                              "bytes": len(encoded), "redacted": content != text})
+            current = _file_directory(Path(request["workspace"]))
+            try:
+                before, after = os.fstat(workspace), os.fstat(current)
+                if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+                    raise ContextCaptureError("The workspace changed during file context capture.")
+            finally:
+                os.close(current)
+        finally:
+            os.close(workspace)
+        payload = {"schema_version": 1, "binding": binding, "files": files}
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if len(encoded) > MAX_FILE_CONTEXT_BYTES:
+            raise ContextCaptureError("The serialized file context exceeds its size limit; nothing was truncated.")
+        snapshot_id = hashlib.sha256(encoded).hexdigest()
+        directory = _file_storage(Path(state_dir), create=True)
+        temporary = f".{snapshot_id}.{os.urandom(16).hex()}.tmp"
+        created = False
+        try:
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                 0o600, dir_fd=directory)
+            created = True
+            with os.fdopen(descriptor, "wb") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(encoded)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(temporary, f"{snapshot_id}.json", src_dir_fd=directory, dst_dir_fd=directory,
+                        follow_symlinks=False)
+            except FileExistsError:
+                existing = _stable_file(directory, f"{snapshot_id}.json", MAX_FILE_CONTEXT_BYTES, private=True)
+                if existing != encoded:
+                    raise ContextCaptureError("An existing file context failed its integrity check.")
+        finally:
+            try:
+                if created:
+                    os.unlink(temporary, dir_fd=directory)
+            finally:
+                os.close(directory)
+        return snapshot_id
+    except ContextCaptureError:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError) as exc:
+        raise ContextCaptureError("The selected file context could not be captured safely.") from exc
+
+
+def load_file_context(snapshot_id: str, request: dict, state_dir: Path) -> dict:
+    """Load only the immutable selected-file snapshot belonging to this exact scope."""
+    try:
+        _secure_file_primitives()
+        binding = _file_binding(request)
+        if not isinstance(snapshot_id, str) or not re.fullmatch(r"[a-f0-9]{64}", snapshot_id):
+            raise ContextCaptureError("Invalid file context snapshot identifier.")
+        directory = _file_storage(Path(state_dir), create=False)
+        try:
+            data = _stable_file(directory, f"{snapshot_id}.json", MAX_FILE_CONTEXT_BYTES, private=True)
+        finally:
+            os.close(directory)
+        if hashlib.sha256(data).hexdigest() != snapshot_id:
+            raise ContextCaptureError("File context snapshot integrity check failed.")
+        payload = json.loads(data)
+        if (not isinstance(payload, dict) or set(payload) != {"schema_version", "binding", "files"}
+                or type(payload["schema_version"]) is not int or payload["schema_version"] != 1
+                or payload["binding"] != binding or not isinstance(payload["files"], list)):
+            raise ContextCaptureError("File context does not belong to this session, task and workspace.")
+        paths = _selected_paths([entry["path"] for entry in payload["files"]])
+        if paths != [entry["path"] for entry in payload["files"]]:
+            raise ContextCaptureError("File context paths are not in canonical order.")
+        for entry in payload["files"]:
+            if (set(entry) != {"path", "content", "sha256", "bytes", "redacted"}
+                    or not isinstance(entry["content"], str) or "\0" in entry["content"]
+                    or type(entry["bytes"]) is not int or type(entry["redacted"]) is not bool):
+                raise ContextCaptureError("File context metadata is invalid.")
+            encoded = entry["content"].encode("utf-8")
+            if entry["bytes"] != len(encoded) or entry["sha256"] != hashlib.sha256(encoded).hexdigest():
+                raise ContextCaptureError("File context content metadata failed its integrity check.")
+        return payload
+    except ContextCaptureError:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError) as exc:
+        raise ContextCaptureError("The private selected-file snapshot is unavailable.") from exc

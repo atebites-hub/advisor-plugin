@@ -1,6 +1,6 @@
 {
   "name": "advisor",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints.",
   "author": {
     "name": "Advisor contributors"

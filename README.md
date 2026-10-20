@@ -113,7 +113,7 @@ A genuinely incomplete native history, such as a tail/delta without a complete b
 
 In ZCode, Advisor 0.2.0 uses native request metadata to capture the current session's semantic model input: system instructions, retained messages, tool definitions, calls and results, and visible text already produced in the current response. It binds the snapshot to the native workspace, session, turn, and exact consultation arguments. Missing or ambiguous current input fails explicitly; it never substitutes an older turn. A hashed snapshot and coverage receipt stay in private state. No ZCode source changes are required. See the [context-transfer contract](docs/context-transfer.md).
 
-Other hosts and direct CLI calls still require an explicit context packet. Include the objective, constraints, actual relevant source or diff, README/API contract, test commands and output, and attempts. A design summary, path, or test-pass claim alone is insufficient: advising agents cannot open project files or run checks. ZCode snapshots include only material present in its current model input; they do not read unseen project files or recover history discarded before compaction. Protected reasoning and credential headers are excluded. Disclose missing evidence and limit the review accordingly.
+Other hosts and direct CLI calls require an explicit context packet. Use `context` for the objective, history, approach, and constraints. In 0.3.5, use `context_files` to attach actual saved source, tests, contracts, and test output: Advisor reads and freezes those selected files before starting the consultation. Advising agents cannot open paths themselves or run checks. A summary or test-pass claim alone remains insufficient. ZCode retains its separate native snapshot contract and does not accept this option. See [selected-file transfer and limits](docs/context-transfer.md#selected-files-outside-zcode).
 
 For manual consultations and nonnative integrations, the CLI accepts the same packet and waits for the completed result. It is not a fallback after native ZCode capture fails:
 
@@ -127,12 +127,13 @@ uv run --script plugins/advisor/advisor.py consult <<'JSON'
   "task_id": "retry-design",
   "stage": "after_plan",
   "question": "Could this retry strategy duplicate an operation?",
-  "context": "Include the task, constraints, relevant history, plan, code, evidence, and approaches tried here."
+  "context": "Review the retry design against the saved implementation, contract, tests and captured output. Include relevant history and approaches tried here.",
+  "context_files": ["src/retry.py", "tests/test_retry.py", "README.md", "test-output.txt"]
 }
 JSON
 ```
 
-Replace the example workspace with an existing directory. Use `provider: "codex"` for the user's enabled Codex profile. Preserve session and task IDs for follow-ups. ZCode defaults its task ID to the native session plus user turn; an explicit stable task ID remains supported. The [skill](plugins/advisor/skills/advisor/SKILL.md) defines every field.
+Replace the example workspace and selected files with existing paths. `context_files` accepts 1–32 explicit workspace-relative regular UTF-8 files; it never expands globs or follows symlinks. Omit secrets. Secure attachment capture needs directory-descriptor/no-follow support; context-only requests remain available elsewhere. Use `provider: "codex"` for the user's enabled Codex profile. Preserve session and task IDs for follow-ups. ZCode defaults its task ID to the native session plus user turn; an explicit stable task ID remains supported. The [skill](plugins/advisor/skills/advisor/SKILL.md) defines every field.
 
 The advising processes run in temporary directories with project configuration excluded. Claude has tools disabled and its child-only `CLAUDE_CODE_TMPDIR` points to that private directory, avoiding its shared `/tmp/claude-<uid>` startup path under host sandbox denials. Codex uses a read-only sandbox with shell, plugins, apps, hooks, subagents, global memories, browser, and computer-use features disabled. They advise from the supplied packet and, in ZCode, the bound native snapshot. No unrelated session is imported.
 

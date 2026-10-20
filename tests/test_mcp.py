@@ -79,7 +79,10 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                 "session_id": "worker-session", "task_id": "integration-task",
                 "stage": "before_plan", "question": "First uncertainty?",
                 "context": "A fake executable supplies deterministic advice.",
+                "context_files": ["evidence.txt"],
             }
+            evidence = "Saved café 🚗 implementation\r\nassert 'λ' == 'λ'\r\n"
+            (root / "evidence.txt").write_bytes(evidence.encode("utf-8"))
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
@@ -101,6 +104,12 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(question, record["prompt"])
                 self.assertNotIn(record["prompt"], record["arguments"])
                 self.assertNotEqual(record["cwd"], str(root))
+                packet = json.loads(record["prompt"].split("Context packet:\n", 1)[1])
+                self.assertEqual(packet["file_context"]["files"][0]["path"], "evidence.txt")
+                self.assertEqual(packet["file_context"]["files"][0]["content"], evidence)
+                self.assertEqual(packet["file_context"]["files"][0]["bytes"], len(evidence.encode("utf-8")))
+            self.assertEqual(results[0]["context_transfer"]["file_context_id"],
+                             results[1]["context_transfer"]["file_context_id"])
 
         with tempfile.TemporaryDirectory() as directory:
             await asyncio.wait_for(exercise(Path(directory)), timeout=20)
@@ -120,6 +129,16 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                         {tool.name for tool in tools.tools},
                         {"consult_advisor", "read_advice", "advisor_status"},
                     )
+                    consultation = next(tool for tool in tools.tools if tool.name == "consult_advisor")
+                    request_schema = consultation.inputSchema["properties"]["request"]
+                    selection = request_schema["properties"]["context_files"]
+                    self.assertEqual(selection["type"], "array")
+                    self.assertEqual(selection["minItems"], 1)
+                    self.assertEqual(selection["maxItems"], 32)
+                    self.assertTrue(selection["uniqueItems"])
+                    self.assertIn("workspace-relative", selection["description"])
+                    self.assertNotIn("context_files", request_schema.get("required", []))
+                    self.assertTrue(request_schema["additionalProperties"])
                     missing_selection = await session.call_tool("consult_advisor", {"request": {}})
                     self.assertTrue(missing_selection.isError)
                     message = " ".join(getattr(item, "text", "") for item in missing_selection.content)
