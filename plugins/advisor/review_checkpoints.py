@@ -138,7 +138,7 @@ def _literal_paths(workspace, paths) -> list[str]:
             path = path if path.is_absolute() else root / path
             lexical, resolved = Path(os.path.abspath(path)), path.resolve()
             if not resolved.is_relative_to(root):
-                raise CheckpointError("An Advisor dependency path escapes the native workspace.")
+                raise CheckpointError("Advisor file paths must resolve within the consultation workspace.")
             normalized.add(str(resolved))
             if lexical.is_relative_to(root):
                 normalized.add(str(lexical))

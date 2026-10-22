@@ -70,8 +70,13 @@ Identify and defer the work that needs the answer; continue independent work.
 In native ZCode, require `recording_mode: full_retention` from
 `advisor_status.native_context` before every new consultation. Enable General → Keep complete
 model I/O with user approval unless already authorized; leave it enabled.
-This stores app-wide unbounded logs including native reasoning. Supply concrete
-`dependent_paths`; use `[]` only for read-only advice. Declared paths stay held
+This stores app-wide unbounded logs including native reasoning. Native MCP
+metadata selects this route. Supply concrete `dependent_paths`; use `[]` only
+for read-only advice. Without native metadata, supplied packets may omit
+`dependent_paths` or use `[]`; any declared paths must stay in the workspace.
+Neither clears earlier holds. Describe external OS targets in `question` or
+`context`, never `context_files`. Manual packets cannot replace failed native
+capture. Native declarations stay held
 across turns until the exact job's completed native `read_advice` retrieval.
 Failures and unavailable capture do not release them. Shell/delegation is no bypass.
 In ZCode, immediately launch exactly one returned `completion_watcher.input`

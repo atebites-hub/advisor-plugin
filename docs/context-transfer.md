@@ -103,7 +103,7 @@ For that unchanged final revision, `Stop` permits a truthful report that the rev
 
 ## Other hosts
 
-Generic MCP does not expose a host's system prompt or conversation. Other hosts and manual standalone CLI consultations require explicit `context` for relevant instructions, history, tool definitions/results and attempts. Saved source, contracts and test evidence can use selected-file attachments below. Their native transcript adapters are not implemented or claimed tested. Manual CLI support does not authorize an automatic fallback after native capture fails.
+Generic MCP does not expose a host's system prompt or conversation. Native ZCode MCP metadata selects native capture; without it, other hosts and manual standalone CLI consultations use `supplied_packet` and require explicit `context` for relevant instructions, history, tool definitions/results and attempts. On this supplied-packet route, omit `dependent_paths` or use `[]`; any declared paths must resolve within the consultation workspace. Neither omission nor `[]` clears earlier dependency holds. Describe external OS targets in `question` or `context`; `context_files` can attach only eligible workspace files. Their native transcript adapters are not implemented or claimed tested. Manual CLI support does not authorize an automatic fallback after native capture fails.
 
 ## Selected files outside ZCode
 

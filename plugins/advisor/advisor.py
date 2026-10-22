@@ -64,13 +64,16 @@ POLICY = (
     "Call consult_advisor with provider and a focused question; only users configure models and effort. "
     "In ZCode require native_context.recording_mode full_retention for every new consultation. "
     "Bounded or unknown recording fails before a snapshot or provider starts. "
-    "Supply explicit dependent_paths naming "
+    "Native ZCode requires explicit dependent_paths naming "
     "workspace files/directories awaiting advice, or [] for read-only advice. "
     "Native session metadata attaches "
     "the current system instructions, available transcript, tool definitions, "
     "calls and results automatically; stage and a stable task_id may be supplied. "
     "Other hosts require workspace, host, stable session_id and task_id, stage, "
-    "question, and context. In those hosts, attach saved source, tests, contracts, "
+    "question, and context. For supplied packets, omit dependent_paths or use []; "
+    "any supplied paths must resolve within the workspace. Describe external OS "
+    "targets in question/context. This does not clear native holds. "
+    "In those hosts, attach saved source, tests, contracts, "
     "and test output with context_files: 1-32 explicit workspace-relative UTF-8 files. "
     "Advisor freezes their sanitized literal contents before starting the job; "
     "paths and paraphrases in context are not file attachments. Do not use "
@@ -1117,6 +1120,9 @@ def build_server():
         session_id (worker session), task_id (stable task), stage (before_plan,
         after_plan, before_task, during_task), question (review or uncertainty),
         and context (task, constraints, available history, evidence, attempts).
+        Without native request metadata, omit dependent_paths or use []; any
+        supplied paths must resolve within workspace. Describe external OS targets
+        in question/context. This does not clear existing native dependency holds.
         Use context_files for saved source, tests, contracts and test output:
         1-32 explicitly named workspace-relative regular UTF-8 files, captured
         and redacted by Advisor before the job starts. Symlinks and traversal
