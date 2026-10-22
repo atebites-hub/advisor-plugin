@@ -763,6 +763,22 @@ class ConsultTests(unittest.TestCase):
         provider.assert_not_called()
 
     @patch.object(advisor, "run_provider")
+    def test_manual_external_dependency_is_rejected_before_provider_call(self, provider):
+        with self.assertRaisesRegex(advisor.AdvisorError,
+                                    "Advisor file paths must resolve within the consultation workspace"):
+            self.consult(host="codex", dependent_paths=[str(self.root / "Tailscale.app")])
+        provider.assert_not_called()
+        self.assertFalse(self.state.exists())
+
+    @patch.object(advisor, "run_provider", return_value=("Advice", "native-1"))
+    def test_manual_dependency_declarations_keep_supplied_packet_transfer(self, provider):
+        for declaration in ({}, {"dependent_paths": []}, {"dependent_paths": ["src/file.py"]},
+                            {"dependent_paths": [str(self.workspace / "src/file.py")]}):
+            with self.subTest(declaration=declaration):
+                result = self.consult(host="codex", **declaration)
+                self.assertEqual(result["context_transfer"]["mode"], "supplied_packet")
+
+    @patch.object(advisor, "run_provider")
     def test_rejects_invalid_configuration_without_calling_provider(self, provider):
         cases = [
             {},

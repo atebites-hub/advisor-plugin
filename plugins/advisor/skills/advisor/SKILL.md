@@ -33,21 +33,23 @@ ZCode named-edit hooks block declared paths across turns until that exact job's 
 
 An early `before_plan`, `after_plan`, or `before_task` review arms final review after edits in its turn. Save and test before that review. Continue this policy after an idle wake even though receipts stay in their original turn. Stop checks outstanding jobs and local freshness; old advice cannot review new edits. Reactive `during_task`-only tasks need no repeated reviews. An uncompleted job means incomplete review; never resubmit it to recover.
 
-In **other hosts or the standalone CLI**, supply this packet; only ZCode captures context automatically.
+Native ZCode MCP metadata selects capture; otherwise supply a packet (`supplied_packet`):
 
 | Field | Value |
 | --- | --- |
 | `provider` | `claude` or `codex` |
-| `workspace` | Absolute project directory |
-| `host` | Working environment, e.g. `cursor` |
-| `session_id` | Stable worker session ID |
-| `task_id` | Stable task ID; reuse for follow-ups |
+| `workspace` | Absolute project root |
+| `host` | Environment, e.g. `cursor` |
+| `session_id` | Stable session ID |
+| `task_id` | Stable ID; reuse for follow-ups |
 | `stage` | `before_plan`, `after_plan`, `before_task`; `during_task` for final reviews |
-| `question` | Focused review question |
-| `context` | Context packet as text |
-| `context_files` | Optional selected saved files, relative to the workspace |
+| `question` | Review question |
+| `context` | Text |
+| `context_files` | Optional workspace files |
 
-For code reviews, use `context_files` for saved source, tests, contracts and output: 1–32 workspace-relative regular UTF-8 files. Advisor freezes sanitized literal contents; symlinks are rejected and globs never expand. Do not use this option for native ZCode. Put history and approach in `context`; mark missing evidence. Advisors cannot open paths or run checks.
+`context_files` freezes sanitized literal source/tests/contracts/output: 1–32 workspace-relative regular UTF-8 files, no symlinks/globs; unavailable in native ZCode. Put history/approach in `context`; mark missing evidence. Advisors cannot open paths or run checks.
+
+Supplied packets may omit `dependent_paths` or use `[]`; any paths stay within the workspace. Neither clears earlier holds. Put external OS targets in `context`/`question`, never `context_files`.
 
 Omit secrets and unrelated personal data. Native capture reads only the selected session, excludes protected reasoning and credential headers/values, and declares compaction and omitted image/video bytes. It cannot recover discarded history or unseen media. Tool input is limited to 1 MiB; assembled packets to 8 MiB, without silent truncation. See `docs/context-transfer.md`.
 
