@@ -40,6 +40,11 @@ class HookFormatTests(unittest.TestCase):
             }}],
         })
 
+    def test_cursor_format_returns_only_additional_context(self):
+        self.assertEqual(self.run_startup("--hook-format", "cursor"), {
+            "additional_context": "Advisor SessionStart instructions\n" + advisor.POLICY,
+        })
+
     def test_explicit_hook_format_on_other_commands_fails_before_side_effects(self):
         handlers = ("build_server", "advisor_status", "consult", "run_job", "wait_for_advice",
                     "review_checkpoint", "state_root")

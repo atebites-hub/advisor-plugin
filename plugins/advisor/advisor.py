@@ -1330,7 +1330,7 @@ def main() -> int:
     parser.add_argument("command", choices=("serve", "consult", "configure", "doctor", "worker", "wait", "session-start", "review-checkpoint"))
     parser.add_argument("job_id", nargs="?")
     parser.add_argument("--config", type=Path, help="User configuration file (configure, doctor, or consult).")
-    parser.add_argument("--hook-format", choices=("claude", "antigravity"),
+    parser.add_argument("--hook-format", choices=("claude", "antigravity", "cursor"),
                         help="Startup hook output format (session-start only; default: claude).")
     args = parser.parse_args()
     try:
@@ -1366,6 +1366,8 @@ def main() -> int:
             policy = "Advisor SessionStart instructions\n" + POLICY
             if args.hook_format == "antigravity":
                 output = {"injectSteps": [{"systemMessage": {"systemMessage": policy}}]}
+            elif args.hook_format == "cursor":
+                output = {"additional_context": policy}
             else:
                 output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": policy}}
             print(json.dumps(output))

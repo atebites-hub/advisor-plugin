@@ -42,7 +42,7 @@ Installation and the native Claude advice lifecycle passed in a fresh 0.2.10 rea
 
 ## Project or user instructions
 
-For a host without a supplied startup hook, merge this section into the project's `AGENTS.md` or the host's equivalent instructions. User-level instructions apply more broadly when the host supports them. Preserve existing content; do not replace the whole file.
+Grok Build, ordinary Claude Desktop chat, ordinary ChatGPT cloud chat, a portable Muse install, and Cursor cloud agents do not inject this policy from a hook. For those hosts, merge this section into the project's `AGENTS.md` or the host's equivalent instructions. User-level instructions apply more broadly when the host supports them. Preserve existing content; do not replace the whole file.
 
 ```markdown
 ## Advisor

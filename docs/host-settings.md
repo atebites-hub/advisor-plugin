@@ -37,6 +37,8 @@ The [plugin reference](https://cursor.com/docs/reference/plugins) documents a `v
 
 Team administrators configure variables through dashboard **Plugins → Configure**. Individual GUI configuration remains unverified.
 
+Version 0.3.7 points the Cursor manifest `hooks` field at `hooks/hooks-cursor.json`. `sessionStart` runs `uv run --script ./advisor.py session-start --hook-format cursor` from the plugin directory and prints `additional_context`. It does not call a model. Cursor CLI plugin hooks, including a package loaded with `--plugin-dir`, use that same file. The Desktop 3.24.18 and CLI 2026.10.18 sessions above predate this hook.
+
 Cursor CLI **2026.10.18-ea085cb** loaded the unmodified production plugin and connected its actual MCP server. This build left absent manifest variables as literal placeholders instead of applying their declared defaults. Start shared-file mode explicitly:
 
 ```sh
