@@ -1,13 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "advisor",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints.",
   "author": {
     "name": "Advisor contributors"
   },
   "extensions": {
     "com.openai": {
+      "hooks": "./hooks/hooks-codex.json",
       "onboardingSkill": "./skills/advisor-setup/SKILL.md",
       "interface": {
         "displayName": "Advisor",

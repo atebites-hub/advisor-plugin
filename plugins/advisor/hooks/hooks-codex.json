@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --script \"${PLUGIN_ROOT}/advisor.py\" session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

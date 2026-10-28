@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "uv run --script ./advisor.py session-start --hook-format cursor",
+        "timeout": 10
+      }
+    ]
+  }
+}
