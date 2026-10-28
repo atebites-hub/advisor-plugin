@@ -43,6 +43,82 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(codex[codex.index("memories") - 1], "--disable")
         self.assertEqual(codex[-1], "-")
 
+    def test_cursor_command_uses_the_catalog_id_without_force_or_an_effort_flag(self):
+        command = advisor.provider_command("cursor", "claude-opus-5-5-high", None, effort="high")
+        self.assertEqual(command[0], "cursor-agent")
+        self.assertEqual(command[command.index("--model") + 1], "claude-opus-5-5-high")
+        self.assertEqual(command[command.index("--mode") + 1], "ask")
+        self.assertEqual(command[command.index("--sandbox") + 1], "enabled")
+        self.assertEqual(command[command.index("--output-format") + 1], "stream-json")
+        self.assertIn("--print", command)
+        self.assertIn("--stream-partial-output", command)
+        self.assertIn("--trust", command)
+        for flag in ("--effort", "--force", "--yolo", "--plugin-dir", "--approve-mcps"):
+            self.assertNotIn(flag, command)
+        resumed = advisor.provider_command(
+            "cursor", "claude-opus-5-5-high", "c6b62c6f-7ead-4fd6-9922-e952131177ff", effort="high")
+        self.assertEqual(resumed[resumed.index("--resume") + 1], "c6b62c6f-7ead-4fd6-9922-e952131177ff")
+        for model, effort in (("auto", "high"), ("claude-opus-5-5-high", "max")):
+            with self.subTest(model=model, effort=effort), self.assertRaises(advisor.AdvisorError):
+                advisor.provider_command("cursor", model, None, effort=effort)
+
+    def test_cursor_result_uses_terminal_text_and_rejects_tools(self):
+        result = {"type": "result", "subtype": "success", "is_error": False,
+                  "result": "Use A.", "session_id": "native-cursor"}
+        events = [
+            {"type": "system", "subtype": "init", "session_id": "native-cursor", "model": "Claude Opus 5.5 1M High"},
+            {"type": "assistant", "timestamp_ms": 1,
+             "message": {"role": "assistant", "content": [{"type": "text", "text": "Use"}]}},
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Use A."}]}},
+            result,
+        ]
+        self.assertEqual(advisor.parse_response("cursor", "\n".join(map(json.dumps, events)) + "\n"),
+                         ("Use A.", "native-cursor"))
+        tool = {"type": "tool_call", "subtype": "started", "call_id": "tool-1",
+                "tool_call": {"readToolCall": {"args": {"path": "README.md"}}}, "session_id": "native-cursor"}
+        with self.assertRaisesRegex(advisor.AdvisorError, "tool"):
+            advisor.parse_response("cursor", "\n".join(map(json.dumps, [tool, result])))
+        with self.assertRaisesRegex(advisor.AdvisorError, "terminal result"):
+            advisor.parse_response("cursor", "\n".join(map(json.dumps, events[:-1])))
+        with self.assertRaisesRegex(advisor.AdvisorError, "after its terminal"):
+            advisor.parse_response("cursor", "\n".join(map(json.dumps, events + [{"type": "system"}])))
+        with self.assertRaisesRegex(advisor.AdvisorError, "could not complete"):
+            advisor.parse_response("cursor", json.dumps(result | {"is_error": True}))
+
+    def test_cursor_launch_uses_private_config_and_workspace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / "cursor-agent"
+            report = root / "launch.json"
+            executable.write_text(
+                f"#!{sys.executable}\nimport json,os,sys\nfrom pathlib import Path\n"
+                "config = Path(os.environ['CURSOR_CONFIG_DIR']) / 'cli-config.json'\n"
+                f"Path({str(report)!r}).write_text(json.dumps(dict(args=sys.argv, cwd=os.getcwd(), "
+                "config=config.read_text(), stdin=sys.stdin.read(), api=os.environ.get('CURSOR_API_KEY'))))\n"
+                "print(json.dumps(dict(type='result', subtype='success', is_error=False, "
+                "result='Use A.', session_id='native-cursor')))\n")
+            executable.chmod(0o700)
+            with patch.object(advisor.shutil, "which", return_value=str(executable)), \
+                    patch.dict(os.environ, {"CURSOR_API_KEY": "secret-value"}):
+                result = advisor.run_provider("cursor", "claude-opus-5-5-high", "Private context packet",
+                                              root, None, 10, effort="high")
+            recorded = json.loads(report.read_text())
+        self.assertEqual(result, ("Use A.", "native-cursor"))
+        args = recorded["args"]
+        self.assertEqual(args[args.index("--model") + 1], "claude-opus-5-5-high")
+        self.assertEqual(args[args.index("--mode") + 1], "ask")
+        self.assertEqual(Path(args[args.index("--workspace") + 1]).resolve(), Path(recorded["cwd"]).resolve())
+        self.assertNotEqual(Path(recorded["cwd"]), root)
+        self.assertEqual(recorded["stdin"], "Private context packet")
+        self.assertIsNone(recorded["api"])
+        self.assertNotIn("--force", args)
+        self.assertNotIn("Private context packet", args)
+        config = json.loads(recorded["config"])
+        self.assertEqual(config["permissions"]["allow"], [])
+        self.assertEqual(config["permissions"]["deny"], ["Shell(*)", "Read(**)", "Write(**)", "WebFetch(*)", "Mcp(*:*)"])
+        self.assertEqual(config["approvalMode"], "allowlist")
+        self.assertEqual(config["sandbox"], {"mode": "enabled", "readBoundary": "workspace"})
+
     def test_commands_resume_only_the_supplied_native_session(self):
         claude = advisor.provider_command("claude", "claude-opus-5-5", "native-1")
         self.assertEqual(claude[claude.index("--resume") + 1], "native-1")
@@ -130,6 +206,8 @@ class ProviderTests(unittest.TestCase):
                 "codex": [{"type": "thread.started", "thread_id": "native-unicode"},
                           {"type": "item.completed", "item": {"type": "agent_message", "text": advice}},
                           {"type": "turn.completed"}],
+                "cursor": [{"type": "result", "subtype": "success", "is_error": False,
+                            "result": advice, "session_id": "native-unicode"}],
             }
             for provider, events in streams.items():
                 with self.subTest(provider=provider, separator=repr(separator)):
@@ -170,7 +248,7 @@ class ProviderTests(unittest.TestCase):
                     return stdout.encode(), b""
 
                 capture.side_effect = capture_output
-                environment = {key: "private-value" for key in ("CLAUDECODE", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY")}
+                environment = {key: "private-value" for key in ("CLAUDECODE", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY", "CURSOR_API_KEY")}
                 environment["CLAUDE_CODE_EFFORT_LEVEL"] = "low"
                 environment["CLAUDE_CODE_DISABLE_ADVISOR_TOOL"] = "0"
                 with patch.dict(os.environ, environment):
@@ -185,7 +263,7 @@ class ProviderTests(unittest.TestCase):
                 self.assertNotIn("Private context packet", command)
                 kwargs = popen.call_args.kwargs
                 self.assertEqual(kwargs["env"]["ADVISOR_ACTIVE"], "1")
-                for key in ("CLAUDECODE", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"):
+                for key in ("CLAUDECODE", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY", "CURSOR_API_KEY"):
                     self.assertNotIn(key, kwargs["env"])
                 if name == "claude":
                     self.assertEqual(kwargs["env"]["CLAUDE_CODE_EFFORT_LEVEL"], "max")
@@ -475,7 +553,7 @@ class ProviderTests(unittest.TestCase):
         output = "[" * 1500 + "0" + "]" * 1500
         process = self.fake_process(f"print({output!r})\n")
         stdout, _ = advisor.capture_process(process, b"", 2)
-        for provider in ("claude", "codex"):
+        for provider in ("claude", "codex", "cursor"):
             with self.subTest(provider=provider), self.assertRaises(advisor.AdvisorError):
                 advisor.parse_response(provider, stdout.decode())
 

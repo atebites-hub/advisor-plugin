@@ -33,7 +33,7 @@ The local Claude Desktop Code tab uses its own bundled version and requires sepa
 
 ## Cursor
 
-The [plugin reference](https://cursor.com/docs/reference/plugins) documents a `variables` JSON Schema and `${VAR}` interpolation. Advisor declares seven uppercase `ADVISOR_*` variables in its Cursor manifest and forwards them only through `.cursor-plugin/mcp.json`. Boolean controls use string enums `true`/`false` because boolean-to-environment serialization is undocumented.
+The [plugin reference](https://cursor.com/docs/reference/plugins) documents a `variables` JSON Schema and `${VAR}` interpolation. Advisor declares uppercase `ADVISOR_*` variables in its Cursor manifest and forwards them only through `.cursor-plugin/mcp.json`. Version 0.3.6 adds `ADVISOR_CURSOR_ENABLED`, `ADVISOR_CURSOR_MODEL`, and `ADVISOR_CURSOR_EFFORT`. Cursor Agent stays off unless that enabled value is `true`. The checks below record the earlier seven-variable package. Boolean controls use string enums `true`/`false` because boolean-to-environment serialization is undocumented.
 
 Team administrators configure variables through dashboard **Plugins → Configure**. Individual GUI configuration remains unverified.
 
@@ -43,7 +43,7 @@ Cursor CLI **2026.10.18-ea085cb** loaded the unmodified production plugin and co
 ADVISOR_USE_APP_SETTINGS=false cursor-agent --plugin-dir /absolute/path/to/advisor/plugins/advisor
 ```
 
-Use the absolute Cursor executable when another installed CLI also owns the name `agent`. Configure `~/.config/advisor/config.json` with the shared wizard first, then start a fresh Cursor session. Verify both profiles and the configuration source with `advisor_status`. With the master switch explicitly false, unused profile placeholders are ignored; an unresolved master switch or incomplete opted-in profile still fails validation.
+Use the absolute Cursor executable when another installed CLI also owns the name `agent`. Configure `~/.config/advisor/config.json` with the shared wizard first, then start a fresh Cursor session. Verify every profile and the configuration source with `advisor_status`. With the master switch explicitly false, unused profile placeholders are ignored; an unresolved master switch or incomplete opted-in profile still fails validation.
 
 The native plugin launcher did not forward inherited custom `ADVISOR_CONFIG` or `ADVISOR_STATE_DIR`. Use the default shared file with this route; custom locations require a separately configured manual MCP server. Headless tool execution also needs an appropriate native approval policy: the tested `--force` option permitted tool calls for that disposable session, whereas `--approve-mcps` alone approved server startup only.
 

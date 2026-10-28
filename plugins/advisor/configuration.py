@@ -13,9 +13,13 @@ import tempfile
 DEFAULT_ADVISORS = {
     "claude": {"enabled": True, "model": "claude-opus-5-5", "effort": "max"},
     "codex": {"enabled": True, "model": "gpt-6.1-sol", "effort": "max"},
+    # Opt-in: an omitted profile stays disabled so upgrades do not start a new advisor.
+    "cursor": {"enabled": False, "model": "claude-opus-5-5-high", "effort": "high"},
 }
+LEGACY_PROFILES = {"claude": "claude-opus-5-5", "codex": "gpt-6.1-sol"}
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 MAX_CONFIG_BYTES = 16_384
+_CURSOR_EFFORT = re.compile(r"-(?:(?P<effort>low|medium|high|xhigh|max)|extra-high)(?:-fast)?$")
 
 
 class ConfigurationError(ValueError):
@@ -27,9 +31,27 @@ def config_path(path: Path | None = None) -> Path:
     return Path(selected).expanduser() if selected else Path.home() / ".config/advisor/config.json"
 
 
+def cursor_model_effort(model: str) -> str | None:
+    """Return the effort encoded by a Cursor catalog id, such as claude-opus-5-5-high."""
+    if not isinstance(model, str):
+        return None
+    match = _CURSOR_EFFORT.search(model)
+    if match is None:
+        return None
+    return match.group("effort") or "xhigh"
+
+
+def validate_cursor_profile(model: str, effort: str) -> None:
+    encoded = cursor_model_effort(model)
+    if encoded is None:
+        raise ConfigurationError("Cursor model ids must encode an effort suffix, for example claude-opus-5-5-high.")
+    if encoded != effort:
+        raise ConfigurationError(f"Cursor effort must match the model id suffix ({encoded}).")
+
+
 def validate_model(provider: str, model: str) -> None:
     if not isinstance(provider, str) or provider not in DEFAULT_ADVISORS:
-        raise ConfigurationError("Advisor provider must be claude or codex.")
+        raise ConfigurationError("Advisor provider must be claude, codex, or cursor.")
     if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model):
         raise ConfigurationError("Advisor model must be a safe identifier of 1 to 128 characters.")
     if provider == "claude" and not re.fullmatch(r"claude-[a-z0-9][a-z0-9.-]*", model):
@@ -43,7 +65,7 @@ def resolved_advisors(config: dict) -> dict:
         raise ConfigurationError("Advisor configuration must be a JSON object.")
     supplied = config.get("advisors", {})
     if not isinstance(supplied, dict) or any(name not in DEFAULT_ADVISORS for name in supplied):
-        raise ConfigurationError("advisors must be an object containing only claude and codex profiles.")
+        raise ConfigurationError("advisors must be an object containing only claude, codex, and cursor profiles.")
     profiles = {name: dict(profile) for name, profile in DEFAULT_ADVISORS.items()}
     for name, values in supplied.items():
         if not isinstance(values, dict) or any(key not in ("enabled", "model", "effort") for key in values):
@@ -55,6 +77,8 @@ def resolved_advisors(config: dict) -> dict:
         validate_model(name, profile["model"])
         if not isinstance(profile["effort"], str) or profile["effort"] not in EFFORTS:
             raise ConfigurationError(f"advisors.{name}.effort must be one of: {', '.join(EFFORTS)}.")
+        if name == "cursor":
+            validate_cursor_profile(profile["model"], profile["effort"])
     return profiles
 
 
@@ -63,7 +87,7 @@ def _validate(config: dict) -> dict:
         raise ConfigurationError("Advisor configuration must be a JSON object.")
     if "provider" in config or "model" in config:
         name = config.get("provider")
-        if not isinstance(name, str) or name not in DEFAULT_ADVISORS or config.get("model") != DEFAULT_ADVISORS[name]["model"]:
+        if not isinstance(name, str) or name not in LEGACY_PROFILES or config.get("model") != LEGACY_PROFILES[name]:
             raise ConfigurationError("Configuration must select one of the two fixed advisor profiles.")
     for key, default in (("idle_timeout_seconds", 1200), ("max_consults_per_task", 5)):
         value = config.get(key, default)

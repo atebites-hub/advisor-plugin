@@ -1,8 +1,8 @@
 # Verified usage handoff
 
-Set `"usage_fallback": true` in `~/.config/advisor/config.json` to authorize one alternate advisor after verified account usage exhaustion. It defaults to false and accepts only a JSON boolean. `advisor_status.usage_fallback.enabled` reports the current setting. Enabling this can send the same frozen context to both services sequentially and consume both accounts' allowances.
+Set `"usage_fallback": true` in `~/.config/advisor/config.json` to authorize one alternate advisor after verified account usage exhaustion. It defaults to false and accepts only a JSON boolean. `advisor_status.usage_fallback.enabled` reports the current setting. Enabling this can send the same frozen context to both Claude and Codex sequentially and consume both accounts' allowances. Cursor Agent is not an alternate in either direction. A Cursor usage error fails that consultation and does not switch providers.
 
-The working agent checks `advisor_status` and chooses one enabled primary. Handoff can use only the other enabled, user-configured provider profile. Defaults remain Claude Opus 5.5 Max and GPT 6.1 Sol Max; changing the Codex profile to `gpt-6-astra` with `max` makes that the Codex attempt. Requests cannot override model or effort, and a disabled alternate is never launched. See [profile configuration](../README.md#configure-advisors).
+The working agent checks `advisor_status` and chooses one enabled primary. Handoff can use only the other enabled Claude or Codex profile. Defaults remain Claude Opus 5.5 Max and GPT 6.1 Sol Max; changing the Codex profile to `gpt-6-astra` with `max` makes that the Codex attempt. Requests cannot override model or effort, and a disabled alternate is never launched. See [profile configuration](../README.md#configure-advisors).
 
 Advisor preserves the original job, snapshot, question, dependency hold, and watcher. It uses each provider's separate native conversation and successful-consult budget. An explicit total deadline covers both attempts, including verification; the alternate gets no fresh total allowance. Idle tracking starts anew for each provider.
 
