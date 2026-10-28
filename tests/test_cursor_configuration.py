@@ -41,7 +41,7 @@ class CursorConfigurationTests(unittest.TestCase):
         self.assertEqual(schema["type"], "object")
         fields = schema["properties"]
         expected = {"ADVISOR_USE_APP_SETTINGS"}
-        for provider in ("CLAUDE", "CODEX"):
+        for provider in ("CLAUDE", "CODEX", "CURSOR"):
             expected.update("ADVISOR_" + provider + "_" + suffix for suffix in ("ENABLED", "MODEL", "EFFORT"))
         self.assertEqual(set(fields), expected)
         self.assertEqual(set(self.server["env"]), expected)

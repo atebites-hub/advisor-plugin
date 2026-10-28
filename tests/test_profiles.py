@@ -91,7 +91,8 @@ class ProfileTests(unittest.TestCase):
     def app_settings(self, **changes):
         values = {"ADVISOR_USE_APP_SETTINGS": "true",
                   "ADVISOR_CLAUDE_ENABLED": "false", "ADVISOR_CLAUDE_MODEL": "claude-opus-5-5", "ADVISOR_CLAUDE_EFFORT": "max",
-                  "ADVISOR_CODEX_ENABLED": "true", "ADVISOR_CODEX_MODEL": "gpt-6-astra", "ADVISOR_CODEX_EFFORT": "high"}
+                  "ADVISOR_CODEX_ENABLED": "true", "ADVISOR_CODEX_MODEL": "gpt-6-astra", "ADVISOR_CODEX_EFFORT": "high",
+                  "ADVISOR_CURSOR_ENABLED": "false", "ADVISOR_CURSOR_MODEL": "claude-opus-5-5-high", "ADVISOR_CURSOR_EFFORT": "high"}
         os.environ.update(values | changes)
 
     def test_app_profiles_override_only_profiles_and_report_the_layered_source(self):
@@ -204,6 +205,33 @@ class ProfileTests(unittest.TestCase):
                           for attempt in result["provider_attempts"]],
                          [("claude", "claude-opus-5-5", "max", "usage_exhausted"),
                           ("codex", "gpt-6-astra", "high", "completed")])
+
+    def test_cursor_stays_opt_in_and_outside_usage_fallback(self):
+        self.assertFalse(advisor.load_config(self.config)["advisors"]["cursor"]["enabled"])
+        self.assertEqual(advisor.load_config(self.config)["advisors"]["cursor"]["model"], "claude-opus-5-5-high")
+        with patch.object(advisor.shutil, "which", return_value=None):
+            status = advisor.advisor_status(self.config)
+        self.assertFalse(status["advisors"]["cursor"]["installed"])
+        self.configured(usage_fallback=True, advisors={"cursor": {"enabled": True}})
+        exhausted = advisor.UsageExhausted({"message": "Verified synthetic exhaustion."})
+        with patch.object(advisor, "run_provider", side_effect=exhausted) as run:
+            with self.assertRaisesRegex(advisor.AdvisorError, "no enabled alternate"):
+                advisor.consult(self.request | {"provider": "cursor"}, config_path=self.config, state_dir=self.state)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[:2], ("cursor", "claude-opus-5-5-high"))
+        self.assertEqual(run.call_args.kwargs["effort"], "high")
+        with patch.object(advisor, "run_provider", side_effect=[exhausted, ("Advice.", "native-2")]) as run:
+            result = advisor.consult(self.request | {"provider": "claude"},
+                                     config_path=self.config, state_dir=self.state)
+        self.assertEqual([call.args[0] for call in run.call_args_list], ["claude", "codex"])
+        self.assertEqual(result["provider"], "codex")
+        with patch.object(advisor, "run_provider", side_effect=[exhausted, ("Advice.", "native-3")]) as run:
+            result = advisor.consult(self.request | {"question": "Review the Codex handoff."},
+                                     config_path=self.config, state_dir=self.state)
+        self.assertEqual([call.args[0] for call in run.call_args_list], ["codex", "claude"])
+        self.assertEqual(result["provider"], "claude")
+        self.assertIsNone(advisor.detect_usage(
+            "cursor", "You've hit your usage limit.", 1, model="claude-opus-5-5-high", effort="high"))
 
     def test_attempt_journals_are_separate_for_changed_profiles(self):
         with patch.object(advisor, "run_provider", return_value=("Advice.", "native-1")):

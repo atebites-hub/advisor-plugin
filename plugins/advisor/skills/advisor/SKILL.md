@@ -13,9 +13,9 @@ Also consult for recurring errors, unexpected results, approach changes, or cons
 
 ## Choose one advisor
 
-Call `advisor_status` at session start. Use `consult_advisor` with exactly one enabled `provider`: `claude` (Claude Code CLI) or `codex` (Codex CLI). Use its reported user-configured model and effort; requests cannot override them. With both disabled, make no new calls and report required reviews incomplete. Configuration does not prove account/model access.
+Call `advisor_status` at session start. Use `consult_advisor` with exactly one enabled `provider`: `claude`, `codex`, or `cursor` (off until enabled). Use its reported user-configured model and effort; requests cannot override them. With every advisor disabled, make no new calls and report required reviews incomplete. Configuration does not prove account/model access.
 
-Prefer `claude` for frontend, design, UX, planning, delegation, and orchestration; `codex` for engineering, backend, architecture, mathematics, implementation, testing, and optimization. These preferences never override disabled settings. User-enabled `usage_fallback` permits the other enabled profile once after verified account exhaustion. Inspect `provider_attempts` and answering `provider`; keep the same job, waiter, context, and hold. Timeout, auth, unknown quota, or capture failure never switches. Never replace a failed job or substitute models.
+Prefer `claude` for frontend, design, UX, planning, delegation, and orchestration; `codex` for engineering, backend, architecture, mathematics, implementation, and testing. User-enabled `usage_fallback` permits the other enabled Claude or Codex profile once after verified account exhaustion; `cursor` is not an alternate. Inspect `provider_attempts` and answering `provider`; keep the same job, waiter, context, and hold. Timeout, auth, unknown quota, or capture failure never switches. Never replace a failed job or substitute models.
 
 ## Supply the context
 
@@ -37,7 +37,7 @@ Native ZCode MCP metadata selects capture; otherwise supply a packet (`supplied_
 
 | Field | Value |
 | --- | --- |
-| `provider` | `claude` or `codex` |
+| `provider` | `claude`, `codex`, or `cursor` |
 | `workspace` | Absolute project root |
 | `host` | Environment, e.g. `cursor` |
 | `session_id` | Stable session ID |

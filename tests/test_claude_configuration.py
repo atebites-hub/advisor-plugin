@@ -49,7 +49,8 @@ class ClaudeConfigurationTests(unittest.TestCase):
     def test_native_fields_preserve_profiles_and_opt_in_to_overrides(self):
         fields = self.manifest["userConfig"]
         self.assertEqual(set(fields), {"use_app_settings", "claude_enabled", "claude_model", "claude_effort",
-                                       "codex_enabled", "codex_model", "codex_effort"})
+                                       "codex_enabled", "codex_model", "codex_effort",
+                                       "cursor_enabled", "cursor_model", "cursor_effort"})
         self.assertIs(fields["use_app_settings"]["default"], False)
         for provider, profile in advisor.configuration.DEFAULT_ADVISORS.items():
             for name, kind in (("enabled", "boolean"), ("model", "string"), ("effort", "string")):

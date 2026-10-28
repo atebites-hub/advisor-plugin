@@ -13,7 +13,7 @@ class PluginConfigurationTests(unittest.TestCase):
         self.assertIs(fields['use_app_settings']['default'], True)
         env = manifest['mcpServers']['advisor']['env']
         self.assertEqual(env['ADVISOR_USE_APP_SETTINGS'], '${user_config.use_app_settings}')
-        for provider in ('claude', 'codex'):
+        for provider in ('claude', 'codex', 'cursor'):
             for name, kind in (('enabled', 'boolean'), ('model', 'string'), ('effort', 'string')):
                 key = provider + '_' + name
                 self.assertEqual(fields[key]['type'], kind)

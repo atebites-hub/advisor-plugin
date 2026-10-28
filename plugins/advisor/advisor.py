@@ -33,7 +33,8 @@ from session_context import ContextCaptureError, ContextUnavailableError, captur
 from usage_limits import prepare_codex_usage, detect_usage
 from review_checkpoints import CheckpointError, attach_dependencies, begin_dependencies, normalize_dependent_paths, register_review, record_review, record_unavailable_review, review_checkpoint, verify_job_scope
 
-PROFILES = {"claude": "claude-opus-5-5", "codex": "gpt-6.1-sol"}
+PROFILES = {"claude": "claude-opus-5-5", "codex": "gpt-6.1-sol", "cursor": "claude-opus-5-5-high"}
+CLI_EXECUTABLES = {"claude": "claude", "codex": "codex", "cursor": "cursor-agent"}
 STAGES = {"before_plan", "after_plan", "before_task", "during_task"}
 MAX_INPUT_BYTES = 1_048_576
 MAX_CONTEXT_BYTES = 8 * 1_048_576
@@ -60,7 +61,7 @@ POLICY = (
     "or consequential uncertainty remains. Short reactive tasks whose next "
     "action is dictated by fresh tool output do not need repeated reviews. "
     "First call advisor_status to discover the user's enabled advisor models and efforts. "
-    "Choose exactly one enabled primary provider per consultation: claude or codex. "
+    "Choose exactly one enabled primary provider per consultation: claude, codex, or cursor. "
     "Call consult_advisor with provider and a focused question; only users configure models and effort. "
     "In ZCode require native_context.recording_mode full_retention for every new consultation. "
     "Bounded or unknown recording fails before a snapshot or provider starts. "
@@ -209,7 +210,7 @@ def select_provider(request: dict, config: dict, *, explicit: bool = False) -> s
         raise AdvisorError("Advisor configuration belongs to the user; request overrides are not allowed.")
     provider = request.get("provider", None if explicit else config.get("provider"))
     if not isinstance(provider, str) or provider not in PROFILES:
-        raise AdvisorError("Select one advisor explicitly using provider: claude or codex.")
+        raise AdvisorError("Select one advisor explicitly using provider: claude, codex, or cursor.")
     if os.environ.get("ADVISOR_ACTIVE"):
         raise AdvisorError("Nested Advisor consultations are disabled to prevent recursion.")
     profiles = config["advisors"]
@@ -223,9 +224,10 @@ def select_provider(request: dict, config: dict, *, explicit: bool = False) -> s
 def consultation_profiles(config: dict, provider: str) -> list:
     """Include only authority that can affect this consultation's providers."""
     profiles = config["advisors"]
-    alternate = "codex" if provider == "claude" else "claude"
+    # Handoff stays the original pair. Cursor is selectable and never an automatic alternate.
+    alternate = {"claude": "codex", "codex": "claude"}.get(provider)
     selected = [provider]
-    if config.get("usage_fallback", False) and profiles[alternate]["enabled"]:
+    if alternate and config.get("usage_fallback", False) and profiles[alternate]["enabled"]:
         selected.append(alternate)
     return [[name, profiles[name]["model"], profiles[name]["effort"]] for name in selected]
 
@@ -326,11 +328,28 @@ def context_packet(request: dict, state_dir: Path | None = None) -> tuple[dict, 
     return packet, transfer
 
 
+def cursor_isolation_config() -> str:
+    """Private Cursor CLI config: allowlist with every tool class denied.
+
+    CURSOR_CONFIG_DIR keeps the signed-in account and replaces ~/.cursor/cli-config.json
+    for this process. Deny rules take precedence over inherited allow rules.
+    """
+    return json.dumps({
+        "version": 1,
+        "editor": {"vimMode": False},
+        "permissions": {"allow": [], "deny": ["Shell(*)", "Read(**)", "Write(**)", "WebFetch(*)", "Mcp(*:*)"]},
+        "approvalMode": "allowlist",
+        "sandbox": {"mode": "enabled", "readBoundary": "workspace"},
+    }, indent=2) + "\n"
+
+
 def provider_command(provider: str, model: str, session_id: str | None, *, effort: str = "max") -> list[str]:
     try:
         configuration.validate_model(provider, model)
         if effort not in configuration.EFFORTS:
             raise configuration.ConfigurationError("Unsupported advisor effort.")
+        if provider == "cursor":
+            configuration.validate_cursor_profile(model, effort)
     except configuration.ConfigurationError as exc:
         raise AdvisorError(str(exc)) from exc
     if session_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", session_id):
@@ -344,6 +363,16 @@ def provider_command(provider: str, model: str, session_id: str | None, *, effor
         if session_id:
             command += ["--resume", session_id]
         return command
+    if provider == "cursor":
+        # Catalog ids already encode effort. Ask mode and the private config deny tools before launch.
+        command = ["cursor-agent", "--print", "--output-format", "stream-json",
+                   "--stream-partial-output", "--mode", "ask", "--sandbox", "enabled",
+                   "--trust", "--model", model]
+        if session_id:
+            command += ["--resume", session_id]
+        return command
+    if provider != "codex":
+        raise AdvisorError("Select one advisor explicitly using provider: claude, codex, or cursor.")
     command = ["codex", "exec", "--json", "--model", model,
                "--config", "model_reasoning_effort=" + json.dumps(effort),
                "--sandbox", "read-only", "--ignore-user-config", "--skip-git-repo-check",
@@ -372,7 +401,27 @@ def parse_response(provider: str, stdout: str, *, expected_model: str | None = N
                               for name in models):
                 raise AdvisorError("Claude reported a different model; advice was rejected.")
             advice, session_id = data.get("result"), data.get("session_id")
-        else:
+        elif provider == "cursor":
+            session_id, advice, completed = None, None, False
+            for line in stdout.split("\n"):
+                if not line.strip():
+                    continue
+                if completed:
+                    raise AdvisorError("Cursor Agent emitted output after its terminal result.")
+                event = json.loads(line)
+                if not isinstance(event, dict):
+                    raise AdvisorError("Cursor Agent returned an unsupported response format.")
+                kind = event.get("type")
+                if kind == "tool_call":
+                    raise AdvisorError("Cursor Agent used a tool; advice was rejected.")
+                if kind != "result":
+                    continue
+                if event.get("is_error") is not False or event.get("subtype") != "success":
+                    raise AdvisorError("Cursor Agent could not complete the consultation.")
+                advice, session_id, completed = event.get("result"), event.get("session_id"), True
+            if not completed:
+                raise AdvisorError("Cursor Agent ended without a terminal result.")
+        elif provider == "codex":
             session_id, messages, completed = None, [], False
             for line in stdout.split("\n"):
                 if not line.strip():
@@ -392,6 +441,8 @@ def parse_response(provider: str, stdout: str, *, expected_model: str | None = N
             if not completed:
                 raise AdvisorError("Codex ended without a completed turn.")
             advice = "\n\n".join(messages)
+        else:
+            raise AdvisorError("Select one advisor explicitly using provider: claude, codex, or cursor.")
         if not isinstance(advice, str) or not advice.strip() or not isinstance(session_id, str):
             raise AdvisorError("Advising CLI returned no advice or resumable session identifier.")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", session_id):
@@ -549,6 +600,33 @@ def capture_process(process: subprocess.Popen, prompt: bytes, timeout: int | Non
                             reasoning = item["type"] == "reasoning"
                             progress["thinking_events" if reasoning else "response_events"] += 1
                             progress["phase"] = "reasoning" if reasoning else "responding"
+        if provider == "cursor":
+            if (kind == "result" and event.get("subtype") == "success" and event.get("is_error") is False
+                    and isinstance(event.get("session_id"), str) and event["session_id"]
+                    and isinstance(event.get("result"), str)):
+                useful, terminal, transition = True, True, "cursor:result"
+            elif kind == "result" and (event.get("is_error") is True or (
+                    isinstance(event.get("subtype"), str) and event["subtype"] not in {"success"})):
+                useful, terminal, transition = True, True, "cursor:error"
+            elif (not terminal_only and kind == "system" and event.get("subtype") == "init"
+                  and isinstance(event.get("session_id"), str) and event["session_id"]):
+                useful, transition = True, "cursor:init"
+            elif (not terminal_only and kind == "assistant" and "timestamp_ms" in event
+                  and event.get("model_call_id") is None):
+                message = event.get("message")
+                content = message.get("content") if isinstance(message, dict) else None
+                chunks = [block.get("text") for block in content if isinstance(block, dict)] if isinstance(content, list) else []
+                text = "".join(chunk for chunk in chunks if isinstance(chunk, str) and chunk)
+                if text:
+                    try:
+                        digest = hashlib.sha256(text.encode()).digest()
+                    except UnicodeError:
+                        digest = None
+                    if digest is not None and item_text.get(("cursor-assistant",)) != digest:
+                        item_text[("cursor-assistant",)] = digest
+                        useful = True
+                        progress["response_events"] += 1
+                        progress["phase"] = "responding"
         if transition:
             useful = transition not in transitions
             transitions.add(transition)
@@ -652,7 +730,7 @@ def run_provider(provider: str, model: str, prompt: str, workspace: Path,
         # Claude's effort environment variable takes precedence over its CLI flag.
         environment["CLAUDE_CODE_EFFORT_LEVEL"] = effort
         environment["CLAUDE_CODE_DISABLE_ADVISOR_TOOL"] = "1"
-    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"):
+    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY", "CURSOR_API_KEY"):
         environment.pop(key, None)
     # Keep project instructions and project MCP configuration out of the advising process.
     with tempfile.TemporaryDirectory(prefix="advisor-consult-") as directory:
@@ -666,6 +744,10 @@ def run_provider(provider: str, model: str, prompt: str, workspace: Path,
             command[2:2] = ["--cd", directory, "--config",
                              "model_instructions_file=" + json.dumps(str(context_file))]
             provider_input = "Advisor consultation question:\n" + (question or "Review the current question in the quoted context packet. Return advice only.")
+        if provider == "cursor":
+            write_private(Path(directory) / "cli-config.json", cursor_isolation_config())
+            environment["CURSOR_CONFIG_DIR"] = directory
+            command += ["--workspace", directory]
         codex_run = None
         if usage_fallback and provider == "codex":
             codex_home = Path(environment.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
@@ -840,7 +922,7 @@ def consult_provider(request: dict, provider: str, serialized: str, transfer: di
 def advisor_status(config_path: Path | None = None) -> dict:
     """Report installed CLIs without reading credentials or making model calls."""
     config = load_config(config_path)
-    return {"advisors": {name: {**profile, "installed": bool(shutil.which(name))}
+    return {"advisors": {name: {**profile, "installed": bool(shutil.which(CLI_EXECUTABLES[name]))}
                          for name, profile in config["advisors"].items()},
             "configuration_source": config["_configuration_source"],
             "authentication": "Use each CLI's auth status command; no credentials are read by Advisor.",
@@ -1084,7 +1166,7 @@ def build_server():
         Returns a background job immediately.
 
         First call advisor_status, then choose ONE enabled primary provider:
-        claude or codex. The user configures each model and effort. With user-enabled
+        claude, codex, or cursor. The user configures each model and effort. With user-enabled
         usage_fallback, verified account exhaustion permits one alternate within
         this same job; provider_attempts records why and provider identifies who
         answered. Keep waiting on this job; no timeout/auth/capture fallback.
@@ -1244,7 +1326,7 @@ def build_server():
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Configure or consult separate Claude Code and Codex advising agents.")
+    parser = argparse.ArgumentParser(description="Configure or consult separate Claude Code, Codex, and Cursor Agent advising CLIs.")
     parser.add_argument("command", choices=("serve", "consult", "configure", "doctor", "worker", "wait", "session-start", "review-checkpoint"))
     parser.add_argument("job_id", nargs="?")
     parser.add_argument("--config", type=Path, help="User configuration file (configure, doctor, or consult).")

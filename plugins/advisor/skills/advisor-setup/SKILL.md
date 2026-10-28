@@ -13,8 +13,9 @@ If available, call `advisor_status` to inspect effective profiles and their conf
 
 - `claude` uses the installed, signed-in Claude Code CLI; its default is `claude-opus-5-5` with `max` effort.
 - `codex` uses the installed, signed-in Codex CLI; its default is `gpt-6.1-sol` with `max` effort.
+- `cursor` uses the installed, signed-in Cursor Agent CLI (`cursor-agent`); its default is `claude-opus-5-5-high` with `high` effort, and it is disabled until the user enables it.
 
-Both providers are enabled by default. Users may disable either or both. Use explicit model IDs; Claude IDs must start with `claude-`. Valid effort values are `low`, `medium`, `high`, `xhigh`, and `max`; actual support depends on the account and model. Preserve unrelated settings, including fallback permission and budgets.
+Claude and Codex are enabled by default. Cursor stays off when omitted, including for existing configurations. Users may enable or disable each profile. Use explicit model IDs; Claude IDs must start with `claude-`. Cursor IDs come from `agent models` and must end in the same effort as the profile (`claude-opus-5-5-high` with `high` is Opus 5.5 High). Valid effort values are `low`, `medium`, `high`, `xhigh`, and `max`; actual support depends on the account and model. Preserve unrelated settings, including fallback permission and budgets.
 
 ## Save through the existing wizard
 

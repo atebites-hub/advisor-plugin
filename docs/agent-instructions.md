@@ -53,9 +53,9 @@ require an early review and a final review after saving the deliverable and
 running tests, before claiming completion. Also consult for recurring errors,
 approach changes, or consequential technical uncertainty. Trivial reactive
 tasks do not need repeated reviews.
-Call `advisor_status` at session start. Choose exactly one enabled `claude` or
-`codex` using its reported model and effort; do not override user settings.
-If both are disabled, make no new calls and report required reviews incomplete.
+Call `advisor_status` at session start. Choose exactly one enabled `claude`,
+`codex`, or `cursor` using its reported model and effort; do not override user settings.
+`cursor` is off until the user enables it. If every advisor is disabled, make no new calls and report required reviews incomplete.
 User-supplied workflow preferences favor Claude for
 frontend, design, UX, planning, delegation, and orchestration; Codex for
 engineering, backend, architecture, mathematics, implementation, testing,
@@ -94,4 +94,4 @@ A file inside an installed plugin is not automatically a project's instruction f
 
 ## Verified usage handoff
 
-With user-enabled `usage_fallback`, verified account exhaustion permits the other enabled, configured advisor once inside the original job. A disabled alternate is never launched. Keep the same watcher and dependency hold; retrieve and evaluate that job's completed advice. `provider_attempts` records requested models/efforts, the exhausted primary, and actual answer provider. The frozen context and explicit total deadline are shared. Timeouts, sign-in failures, unknown quota, local budgets, and native capture failures never switch. Both exhausted means incomplete review. See [evidence and privacy limits](usage-fallback.md).
+With user-enabled `usage_fallback`, verified account exhaustion permits the other enabled Claude or Codex profile once inside the original job. Cursor Agent is not that alternate. A disabled alternate is never launched. Keep the same watcher and dependency hold; retrieve and evaluate that job's completed advice. `provider_attempts` records requested models/efforts, the exhausted primary, and actual answer provider. The frozen context and explicit total deadline are shared. Timeouts, sign-in failures, unknown quota, local budgets, and native capture failures never switch. Both exhausted means incomplete review. See [evidence and privacy limits](usage-fallback.md).

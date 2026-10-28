@@ -1,6 +1,6 @@
 {
   "name": "advisor",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Consult an independent coding advisor at planning, recovery, and completion checkpoints.",
   "author": {
     "name": "Advisor contributors"
@@ -55,6 +55,26 @@
         "description": "Support depends on the model and account.",
         "enum": ["low", "medium", "high", "xhigh", "max"],
         "default": "max"
+      },
+      "ADVISOR_CURSOR_ENABLED": {
+        "type": "string",
+        "title": "Cursor Agent enabled",
+        "description": "Allow the working agent to choose the Cursor Agent CLI when these settings are enabled. Off until you choose true.",
+        "enum": ["true", "false"],
+        "default": "false"
+      },
+      "ADVISOR_CURSOR_MODEL": {
+        "type": "string",
+        "title": "Cursor Agent model",
+        "description": "Catalog model id from agent models. Opus 5.5 High is claude-opus-5-5-high. The id's effort suffix must match ADVISOR_CURSOR_EFFORT.",
+        "default": "claude-opus-5-5-high"
+      },
+      "ADVISOR_CURSOR_EFFORT": {
+        "type": "string",
+        "title": "Cursor Agent effort",
+        "description": "Must match the model id suffix. Cursor Agent has no separate effort flag.",
+        "enum": ["low", "medium", "high", "xhigh", "max"],
+        "default": "high"
       }
     },
     "required": [
@@ -64,7 +84,10 @@
       "ADVISOR_CLAUDE_EFFORT",
       "ADVISOR_CODEX_ENABLED",
       "ADVISOR_CODEX_MODEL",
-      "ADVISOR_CODEX_EFFORT"
+      "ADVISOR_CODEX_EFFORT",
+      "ADVISOR_CURSOR_ENABLED",
+      "ADVISOR_CURSOR_MODEL",
+      "ADVISOR_CURSOR_EFFORT"
     ]
   }
 }

@@ -4,14 +4,15 @@ Advisor gives a coding agent an independent review at planning, recovery, and co
 
 Users enable the advisors the working agent may choose, with one model and effort setting per CLI. The defaults are:
 
-| Provider | Requested model | Effort | Runtime |
-| --- | --- | --- | --- |
-| `claude` | Claude Opus 5.5 (`claude-opus-5-5`) | Max | Claude Code CLI |
-| `codex` | GPT 6.1 Sol (`gpt-6.1-sol`) | Max | Codex CLI |
+| Provider | Requested model | Effort | Runtime | Default |
+| --- | --- | --- | --- | --- |
+| `claude` | Claude Opus 5.5 (`claude-opus-5-5`) | Max | Claude Code CLI | enabled |
+| `codex` | GPT 6.1 Sol (`gpt-6.1-sol`) | Max | Codex CLI | enabled |
+| `cursor` | Claude Opus 5.5 High (`claude-opus-5-5-high`) | High | Cursor Agent CLI (`cursor-agent`) | disabled |
 
-The working agent checks `advisor_status` and chooses one enabled advisor per consultation. User-supplied workflow preferences favor `claude` for frontend, design, UX, planning, delegation, and orchestration, and `codex` for engineering, backend, architecture, mathematics, implementation, testing, and optimization. These are soft selection preferences, not benchmarked rankings, and never override disabled settings.
+The working agent checks `advisor_status` and chooses one enabled advisor per consultation. User-supplied workflow preferences favor `claude` for frontend, design, UX, planning, delegation, and orchestration, and `codex` for engineering, backend, architecture, mathematics, implementation, testing, and optimization. Choose `cursor` when that profile is enabled and the question depends on Cursor's agent or CLI. These are soft selection preferences, not benchmarked rankings, and never override disabled settings.
 
-These defaults follow the [Claude CLI reference](https://code.claude.com/docs/en/cli-reference), [Opus 5.5 documentation](https://platform.claude.com/docs/en/models/opus-5-5/migration-guide), and [Codex model documentation](https://learn.chatgpt.com/docs/models). Each consultation starts with one explicitly selected provider. Optional verified-usage handoff can try the other enabled, configured advisor once within the same job. Responses identify the requested model and effort; they do not prove model access or independently verify the served identity.
+Claude and Codex defaults follow the [Claude CLI reference](https://code.claude.com/docs/en/cli-reference), [Opus 5.5 documentation](https://platform.claude.com/docs/en/models/opus-5-5/migration-guide), and [Codex model documentation](https://learn.chatgpt.com/docs/models). The Cursor id is the catalog entry reported by `agent models` on CLI 2026.10.22; Cursor encodes effort in that id and has no separate effort flag, so `effort` must match the suffix. Each consultation starts with one explicitly selected provider. Optional verified-usage handoff can try the other enabled profile once, and only between Claude and Codex. Cursor is never that alternate. Responses identify the requested model and effort; they do not prove model access or independently verify the served identity. An omitted `cursor` profile stays disabled, so installing this version does not start Cursor Agent consultations by itself.
 
 ## How it works
 
@@ -27,7 +28,7 @@ Version 0.2.9 requires native ZCode requests to declare `dependent_paths`: concr
 
 ## Set up
 
-Install [uv](https://docs.astral.sh/uv/) and the advising CLIs you want to use, then sign in through their normal login flows. Advisor does not copy credentials or call model APIs directly. It removes `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `CODEX_API_KEY` from child environments to favor existing CLI authentication; confirm each CLI's active account and billing mode yourself.
+Install [uv](https://docs.astral.sh/uv/) and the advising CLIs you want to use, then sign in through their normal login flows. For Cursor Agent, use the `cursor-agent` executable (`agent` can name a different tool). Advisor does not copy credentials or call model APIs directly. It removes `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CODEX_API_KEY`, and `CURSOR_API_KEY` from child environments to favor existing CLI authentication; confirm each CLI's active account and billing mode yourself.
 
 Clone the [Advisor plugin marketplace](https://github.com/atebites-hub/advisor-plugin) and check the local prerequisites:
 
@@ -68,7 +69,7 @@ Claude Code exposes the same controls in `/config` through its [plugin `userConf
 
 Cursor CLI requires an explicit mode because it does not apply the manifest's variable defaults. For the default shared configuration file, start a fresh session with `ADVISOR_USE_APP_SETTINGS=false cursor-agent --plugin-dir "/absolute/path/advisor-plugin/plugins/advisor"`. Its native plugin does not forward custom `ADVISOR_CONFIG` or `ADVISOR_STATE_DIR`; use manual MCP configuration for custom paths. Verify the CLI executable: another installed tool may also be named `agent`.
 
-The new Claude and Cursor adapters default app overrides **off**, preserving shared settings on installation. Enable `use_app_settings` (Cursor: `ADVISOR_USE_APP_SETTINGS`) to replace **both** advisor profiles with that app's complete set of controls, including enabled flags. ZCode retains its existing default of app overrides on. Review both profiles before enabling overrides: their initial defaults enable both providers.
+The new Claude and Cursor adapters default app overrides **off**, preserving shared settings on installation. Enable `use_app_settings` (Cursor: `ADVISOR_USE_APP_SETTINGS`) to replace every advisor profile with that app's complete set of controls, including enabled flags. ZCode retains its existing default of app overrides on. Review every profile before enabling overrides: Claude and Codex default on, and Cursor Agent defaults off.
 
 Turn app overrides off to use the shared file and defaults instead. Timeouts, budgets, and `usage_fallback` always remain shared-file settings, and that file must still be valid. Restart the MCP connection or start a fresh session after saving environment-backed settings. `advisor_status` confirms the effective values without consulting a model. See [configuration verification and limits](docs/host-settings.md) and the [ZCode test report](docs/zcode-smoke-test.md).
 
@@ -80,7 +81,7 @@ uv run --script plugins/advisor/advisor.py configure
 uv run --script plugins/advisor/advisor.py configure --config /absolute/path/advisor.json
 ```
 
-The wizard previews both profiles and asks before saving. It preserves unrelated settings. Run one wizard at a time; saves replace the file atomically but are not transactions between simultaneous writers. The default file is `~/.config/advisor/config.json`; `ADVISOR_CONFIG` selects another file for the MCP process or CLI. An explicitly selected missing file is an error when loading settings. For example, enable only GPT 6 Astra Max:
+The wizard previews every profile and asks before saving. It preserves unrelated settings. Run one wizard at a time; saves replace the file atomically but are not transactions between simultaneous writers. The default file is `~/.config/advisor/config.json`; `ADVISOR_CONFIG` selects another file for the MCP process or CLI. An explicitly selected missing file is an error when loading settings. For example, enable only GPT 6 Astra Max:
 
 ```json
 {
@@ -93,7 +94,7 @@ The wizard previews both profiles and asks before saving. It preserves unrelated
 
 Omitted fields retain the defaults above. Use explicit model identifiers rather than aliases; Claude identifiers must start with `claude-`. Effort accepts `low`, `medium`, `high`, `xhigh`, or `max`, subject to the installed provider and account. Configuring a value does not establish access or guarantee the provider will serve it. Agent requests select only `provider`; they cannot override the user's model or effort.
 
-Disabling an advisor prevents new consultations with it and excludes it from usage handoff. If both are disabled, no new advice can be requested; report required reviews incomplete. Existing jobs keep their submitted profiles, and their results remain readable after settings change. Model or effort changes start separate consultation memory.
+Disabling an advisor prevents new consultations with it and excludes it from usage handoff. If every advisor is disabled, no new advice can be requested; report required reviews incomplete. Cursor joins that list only after you set `"cursor": {"enabled": true}` with a catalog id whose suffix matches `effort`, for example `"model": "claude-opus-5-5-high", "effort": "high"`. Existing jobs keep their submitted profiles, and their results remain readable after settings change. Model or effort changes start separate consultation memory.
 
 ChatGPT's structured settings protocol needs its own adapter; Advisor currently uses the shared file there. Other hosts can also use this shared setup. See [configuration by host](docs/compatibility.md#advisor-configuration).
 
@@ -135,7 +136,7 @@ JSON
 
 Replace the example workspace and selected files with existing paths. `context_files` accepts 1–32 explicit workspace-relative regular UTF-8 files; it never expands globs or follows symlinks. Omit secrets. Secure attachment capture needs directory-descriptor/no-follow support; context-only requests remain available elsewhere. Use `provider: "codex"` for the user's enabled Codex profile. Preserve session and task IDs for follow-ups. ZCode defaults its task ID to the native session plus user turn; an explicit stable task ID remains supported. The [skill](plugins/advisor/skills/advisor/SKILL.md) defines every field.
 
-The advising processes run in temporary directories with project configuration excluded. Claude has tools disabled and its child-only `CLAUDE_CODE_TMPDIR` points to that private directory, avoiding its shared `/tmp/claude-<uid>` startup path under host sandbox denials. Codex uses a read-only sandbox with shell, plugins, apps, hooks, subagents, global memories, browser, and computer-use features disabled. They advise from the supplied packet and, in ZCode, the bound native snapshot. No unrelated session is imported.
+The advising processes run in temporary directories with project configuration excluded. Claude has tools disabled and its child-only `CLAUDE_CODE_TMPDIR` points to that private directory, avoiding its shared `/tmp/claude-<uid>` startup path under host sandbox denials. Codex uses a read-only sandbox with shell, plugins, apps, hooks, subagents, global memories, browser, and computer-use features disabled. Cursor Agent is `cursor-agent --print --output-format stream-json --stream-partial-output --mode ask --sandbox enabled --trust`, with `--workspace` set to that private directory and no `--force`. `CURSOR_CONFIG_DIR` points at a private allowlist whose deny rules cover shell, read, write, web fetch, and MCP; a `tool_call` event rejects the advice. `CURSOR_API_KEY` is removed so the signed-in CLI login is used. This is Cursor's documented ask mode, headless behavior without `--force`, and permission denies. It is not Claude's empty tool list, and rules outside that private workspace can still load. Resume passes `--resume` with the result `session_id` and a new private directory. They advise from the supplied packet and, in ZCode, the bound native snapshot. No unrelated session is imported.
 
 The 0.2.2 Codex transport uses `model_instructions_file`: adviser instructions and the complete quoted JSON packet are loaded as native base instructions from a private temporary file, while stdin carries the actual question. This avoids putting the full packet in one user message without summarizing it or enabling adviser tools. Controlled live checks verified complete Codex and Claude input, evidence-based advice, and Codex resume with refreshed context. Max effort and configuration isolation remain. See the [transport contract](docs/context-transfer.md) for verification and remaining history limits.
 

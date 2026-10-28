@@ -94,7 +94,9 @@ class NativeContextMCPTests(unittest.IsolatedAsyncioTestCase):
                            "ADVISOR_USE_APP_SETTINGS": "true",
                            "ADVISOR_CLAUDE_ENABLED": "false", "ADVISOR_CLAUDE_MODEL": "claude-opus-5-5",
                            "ADVISOR_CLAUDE_EFFORT": "max", "ADVISOR_CODEX_ENABLED": "true",
-                           "ADVISOR_CODEX_MODEL": "gpt-6-astra", "ADVISOR_CODEX_EFFORT": "high"}
+                           "ADVISOR_CODEX_MODEL": "gpt-6-astra", "ADVISOR_CODEX_EFFORT": "high",
+                           "ADVISOR_CURSOR_ENABLED": "false", "ADVISOR_CURSOR_MODEL": "claude-opus-5-5-high",
+                           "ADVISOR_CURSOR_EFFORT": "high"}
             for key in ("ADVISOR_ACTIVE", "ZCODE_SESSION_DB_PATH", "ZCODE_SESSION_DB"):
                 environment.pop(key, None)
             params = StdioServerParameters(command=sys.executable, args=[str(RUNTIME), "serve"], env=environment)

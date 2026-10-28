@@ -95,8 +95,25 @@ class ConfigurationTests(unittest.TestCase):
             with self.subTest(provider=provider, model=model), self.assertRaises(configuration.ConfigurationError):
                 configuration.validate_model(provider, model)
         for provider, model in (("claude", "claude-opus-5-5-20261001"), ("codex", "gpt-6-astra"),
-                                ("codex", "new-model_2.0")):
+                                ("codex", "new-model_2.0"), ("cursor", "claude-opus-5-5-high")):
             configuration.validate_model(provider, model)
+
+    def test_cursor_defaults_off_and_effort_must_match_the_model_id(self):
+        profiles = configuration.resolved_advisors({})
+        self.assertEqual(profiles["cursor"],
+                         {"enabled": False, "model": "claude-opus-5-5-high", "effort": "high"})
+        self.assertEqual(profiles["claude"]["effort"], "max")
+        self.assertEqual(profiles["codex"]["model"], "gpt-6.1-sol")
+        enabled = configuration.resolved_advisors({"advisors": {
+            "cursor": {"enabled": True, "model": "claude-opus-5-5-high-fast", "effort": "high"}}})
+        self.assertTrue(enabled["cursor"]["enabled"])
+        extra = configuration.resolved_advisors({"advisors": {
+            "cursor": {"model": "gpt-5.5-extra-high", "effort": "xhigh"}}})
+        self.assertEqual(extra["cursor"]["effort"], "xhigh")
+        for model, effort in (("auto", "high"), ("claude-opus-5-5-high", "max"),
+                              ("claude-opus-5-5-max", "high"), ("composer-2.5", "high")):
+            with self.subTest(model=model, effort=effort), self.assertRaises(configuration.ConfigurationError):
+                configuration.resolved_advisors({"advisors": {"cursor": {"model": model, "effort": effort}}})
 
     def test_old_limits_keep_validation_messages(self):
         for key, expected in (("idle_timeout_seconds", "idle_timeout_seconds must be an integer from 1 to 3600."),
@@ -131,11 +148,12 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_guided_setup_creates_private_file_at_new_explicit_path(self):
         target = self.root / "new" / "config.json"
-        result, output = self.configure(["y", "claude-opus-5-5", "high", "y", "gpt-6-astra", "max", "y"], target)
+        result, output = self.configure(["y", "claude-opus-5-5", "high", "y", "gpt-6-astra", "max", "n", "y"], target)
         self.assertEqual(result, 0)
         config = configuration.load_config(target)
         self.assertEqual(config["advisors"]["codex"]["model"], "gpt-6-astra")
         self.assertEqual(config["advisors"]["claude"]["effort"], "high")
+        self.assertFalse(config["advisors"]["cursor"]["enabled"])
         self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(target.parent.stat().st_mode), 0o700)
         self.assertIn("gpt-6-astra", output)
@@ -143,28 +161,28 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_guided_defaults_preserve_settings_and_do_not_print_unrelated_values(self):
         self.write({"timeout_seconds": 55, "private_note": "do-not-print-this", "advisors": {"claude": {"enabled": False}}})
-        self.configure(["", "", "", "", "y"])
+        self.configure(["", "", "", "", "", "y"])
         config = configuration.load_config(self.path)
         self.assertEqual(config["timeout_seconds"], 55)
         self.assertEqual(config["private_note"], "do-not-print-this")
         self.assertFalse(config["advisors"]["claude"]["enabled"])
-        _, output = self.configure(["", "", "", "", "n"])
+        _, output = self.configure(["", "", "", "", "", "n"])
         self.assertNotIn("do-not-print-this", output)
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
 
     def test_decline_and_eof_leave_existing_bytes_or_missing_file_unchanged(self):
         original = b'{"timeout_seconds":33}\n'
         self.path.write_bytes(original)
-        for answers in (["n", "n", "n"], [EOFError()], ["n", EOFError()]):
+        for answers in (["n", "n", "n", "n"], [EOFError()], ["n", EOFError()]):
             with self.subTest(answers=answers):
                 self.configure(answers)
                 self.assertEqual(self.path.read_bytes(), original)
         self.path.unlink()
-        self.configure(["n", "n", "n"])
+        self.configure(["n", "n", "n", "n"])
         self.assertFalse(self.path.exists())
 
     def test_guided_invalid_choices_can_be_corrected(self):
-        self.configure(["maybe", "yes", "opus", "claude-opus-5-5", "ultra", "max", "no", "yes"])
+        self.configure(["maybe", "yes", "opus", "claude-opus-5-5", "ultra", "max", "no", "n", "yes"])
         profiles = configuration.resolved_advisors(configuration.load_config(self.path))
         self.assertTrue(profiles["claude"]["enabled"])
         self.assertFalse(profiles["codex"]["enabled"])
@@ -174,7 +192,7 @@ class ConfigurationTests(unittest.TestCase):
         actual.write_text("{}")
         self.path.symlink_to(actual)
         with self.assertRaises(configuration.ConfigurationError):
-            self.configure(["n", "n", "y"])
+            self.configure(["n", "n", "n", "y"])
         self.assertEqual(actual.read_text(), "{}")
         self.path.unlink()
         directory = self.root / "actual"
@@ -182,7 +200,7 @@ class ConfigurationTests(unittest.TestCase):
         link = self.root / "link"
         link.symlink_to(directory, target_is_directory=True)
         with self.assertRaises(configuration.ConfigurationError):
-            self.configure(["n", "n", "y"], link / "config.json")
+            self.configure(["n", "n", "n", "y"], link / "config.json")
         self.assertFalse((directory / "config.json").exists())
 
     def test_save_refuses_nonregular_or_unowned_target(self):
@@ -201,7 +219,7 @@ class ConfigurationTests(unittest.TestCase):
         link = self.root / "link"
         link.symlink_to(actual, target_is_directory=True)
         with self.assertRaises(configuration.ConfigurationError):
-            self.configure(["n", "n", "y"], link / "nested/config.json")
+            self.configure(["n", "n", "n", "y"], link / "nested/config.json")
         self.assertFalse((actual / "nested/config.json").exists())
 
     def test_guided_setup_reports_platform_without_ownership_checks(self):
@@ -217,7 +235,7 @@ class ConfigurationTests(unittest.TestCase):
                     self.path.unlink(missing_ok=True)
                 else:
                     self.path.write_text("{}")
-                answers = iter(["n", "n", "y"])
+                answers = iter(["n", "n", "n", "y"])
 
                 def answer(_prompt):
                     value = next(answers)
@@ -241,7 +259,7 @@ class ConfigurationTests(unittest.TestCase):
         self.path.write_bytes(original)
         with patch.object(configuration.os, "replace", side_effect=OSError("disk error")):
             with self.assertRaisesRegex(configuration.ConfigurationError, "Cannot safely save"):
-                self.configure(["n", "n", "y"])
+                self.configure(["n", "n", "n", "y"])
         self.assertEqual(self.path.read_bytes(), original)
         self.assertEqual(list(self.root.iterdir()), [self.path])
 

@@ -41,7 +41,7 @@ No commit convention exists. Use imperative subjects, such as `Add consultation 
 
 ## Agent-Specific Constraints
 
-Hooks supply instructions; agents invoke consultations. Users configure enabled models and efforts for the two providers; preserve existing Max defaults. Check `advisor_status` and explicitly choose one enabled advisor; requests cannot override user profiles. User-enabled `usage_fallback` permits the other enabled profile only after verified account exhaustion, within the same job and frozen context. Never switch on ambiguous errors, copy credentials, consult recursively, or commit session data. Distinguish documented compatibility from live-tested support.
+Hooks supply instructions; agents invoke consultations. Users configure enabled models and efforts for Claude, Codex, and Cursor Agent. Preserve the Claude and Codex Max defaults. Cursor Agent defaults to disabled, model `claude-opus-5-5-high`, effort `high`. Check `advisor_status` and explicitly choose one enabled advisor; requests cannot override user profiles. User-enabled `usage_fallback` permits the other enabled Claude or Codex profile only after verified account exhaustion, within the same job and frozen context. Cursor is not a fallback alternate. Never switch on ambiguous errors, copy credentials, consult recursively, or commit session data. Distinguish documented compatibility from live-tested support.
 
 ## Using Advisor
 
